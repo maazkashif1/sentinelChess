@@ -1,6 +1,8 @@
 # material values shared by the eval bar and the AI
 PIECE_VALUES = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 4}
 
+PROMOTION_PIECES = "QRBN"  # queen first: it is the default promotion
+
 KNIGHT_OFFSETS = ((-2, -1), (-2, 1), (-1, 2), (1, 2), (2, -1), (2, 1), (-1, -2), (1, -2))
 KING_OFFSETS = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
 ROOK_DIRECTIONS = ((-1, 0), (0, -1), (1, 0), (0, 1))
@@ -104,7 +106,7 @@ class GameState:
             self.black_king_location = (move.end_row, move.end_col)
 
         if move.is_pawn_promotion:
-            self.board[move.end_row][move.end_col] = move.piece_moved[0] + "Q"
+            self.board[move.end_row][move.end_col] = move.piece_moved[0] + move.promotion_piece
 
         if move.is_enpassant_move:
             self.board[move.start_row][move.end_col] = "--" 
@@ -495,13 +497,13 @@ class GameState:
 
         if self.board[row + move_amount][col] == "--":  
             if not piece_pinned or pin_direction == (move_amount, 0):
-                moves.append(Move((row, col), (row + move_amount, col), self.board))
+                self.addPawnMove(moves, (row, col), (row + move_amount, col))
                 if row == start_row and self.board[row + 2 * move_amount][col] == "--":  
                     moves.append(Move((row, col), (row + 2 * move_amount, col), self.board))
         if col - 1 >= 0:  
             if not piece_pinned or pin_direction == (move_amount, -1):
                 if self.board[row + move_amount][col - 1][0] == enemy_color and self.board[row + move_amount][col - 1][1] != "S":
-                    moves.append(Move((row, col), (row + move_amount, col - 1), self.board))
+                    self.addPawnMove(moves, (row, col), (row + move_amount, col - 1))
                 if (row + move_amount, col - 1) == self.enpassant_possible:
                     attacking_piece = blocking_piece = False
                     if king_row == row:
@@ -525,7 +527,7 @@ class GameState:
         if col + 1 <= 7:  
             if not piece_pinned or pin_direction == (move_amount, +1):
                 if self.board[row + move_amount][col + 1][0] == enemy_color and self.board[row + move_amount][col + 1][1] != "S":
-                    moves.append(Move((row, col), (row + move_amount, col + 1), self.board))
+                    self.addPawnMove(moves, (row, col), (row + move_amount, col + 1))
                 if (row + move_amount, col + 1) == self.enpassant_possible:
                     attacking_piece = blocking_piece = False
                     if king_row == row:
@@ -546,6 +548,14 @@ class GameState:
                                 blocking_piece = True
                     if not attacking_piece or blocking_piece:
                         moves.append(Move((row, col), (row + move_amount, col + 1), self.board, is_enpassant_move=True))
+
+    def addPawnMove(self, moves, start, end):
+        """Add a pawn move; a move to the last rank becomes one move per promotion piece."""
+        move = Move(start, end, self.board)
+        moves.append(move)
+        if move.is_pawn_promotion:
+            for piece in PROMOTION_PIECES[1:]:
+                moves.append(Move(start, end, self.board, promotion_piece=piece))
 
     def getSentinelPawnMoves(self, row, col, moves):
         """Sentinel: steps one square in any direction (like a king), may
@@ -760,7 +770,8 @@ class Move:
                      "e": 4, "f": 5, "g": 6, "h": 7}
     cols_to_files = {v: k for k, v in files_to_cols.items()}
 
-    def __init__(self, start_square, end_square, board, is_enpassant_move=False, is_castle_move=False):
+    def __init__(self, start_square, end_square, board, is_enpassant_move=False, is_castle_move=False,
+                 promotion_piece="Q"):
         self.start_row = start_square[0]
         self.start_col = start_square[1]
         self.end_row = end_square[0]
@@ -775,7 +786,10 @@ class Move:
         self.is_castle_move = is_castle_move
 
         self.is_capture = self.piece_captured != "--"
+        self.promotion_piece = promotion_piece
         self.moveID = self.start_row * 1000 + self.start_col * 100 + self.end_row * 10 + self.end_col
+        if self.is_pawn_promotion:  # queen promotions keep the plain id, so a click matches them
+            self.moveID += 10000 * PROMOTION_PIECES.index(promotion_piece)
 
     def __eq__(self, other):
         if isinstance(other, Move):
@@ -792,10 +806,8 @@ class Move:
         end_square = self.getRankFile(self.end_row, self.end_col)
 
         if self.piece_moved[1] == "p":
-            if self.is_capture:
-                return self.cols_to_files[self.start_col] + "x" + end_square
-            else:
-                return end_square + "Q" if self.is_pawn_promotion else end_square
+            move_string = self.cols_to_files[self.start_col] + "x" + end_square if self.is_capture else end_square
+            return move_string + "=" + self.promotion_piece if self.is_pawn_promotion else move_string
 
         move_string = self.piece_moved[1]
         if self.is_capture:

@@ -203,7 +203,7 @@ def order_moves(moves, hash_move_id=None):
         if move.piece_captured != "--":
             score += 1_000 + 10 * piece_value[move.piece_captured[1]] - piece_value[move.piece_moved[1]]
         if move.is_pawn_promotion:
-            score += 900
+            score += 100 * piece_value[move.promotion_piece]
         return score
     return sorted(moves, key=priority, reverse=True)
 

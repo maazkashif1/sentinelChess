@@ -120,3 +120,14 @@ def test_insufficient_material():
     assert drawn("4kb2/8/8/8/8/8/8/2B1K3 w - - 0 1")       # bishops on the same colour
     assert not drawn("4k3/8/8/8/8/8/8/1NN1K3 w - - 0 1")   # two knights: mate is possible
     assert not drawn("4k3/8/8/8/8/8/3S4/4K3 w - - 0 1")    # a sentinel can still mate
+
+
+def test_promotion_offers_every_piece():
+    gs = ChessEngine.GameState(fen="4k3/1P6/8/8/8/8/8/4K3 w - - 0 1")
+    promotions = [m for m in gs.getValidMoves() if m.is_pawn_promotion]
+    assert sorted(m.promotion_piece for m in promotions) == ["B", "N", "Q", "R"]
+    knight = next(m for m in promotions if m.promotion_piece == "N")
+    gs.makeMove(knight)
+    assert gs.board[0][1] == "wN" and str(knight) == "b8=N"
+    gs.undoMove()
+    assert gs.board[1][1] == "wp" and gs.board[0][1] == "--"
