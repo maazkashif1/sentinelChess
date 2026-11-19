@@ -21,7 +21,7 @@ ai:
   castling_score: 1
   protect_square_score: 1
   check_punish: 2
-  positional_weight: 0.1
+  positional_weight: 0.01  # piece-square tables are in centipawns, piece values in pawns
   move_repetition_punish: 1
   points_checkmate: 1000
   points_stalemate: 0
