@@ -112,6 +112,33 @@ STALEMATE = cfg["ai"]["points_stalemate"]
 DEPTH = cfg["ai"]["depth"]  # the moves that the engine looks ahead
 
 
+def evaluate_for_display(gamestate, valid_moves, zobrist_keys, transposition_table, depth=None):
+    """Evaluate the current position for the eval bar, from white's point of view, in pawns.
+
+    Runs a shallow search so the number doesn't swing wildly in the middle of an
+    exchange. Mate scores stay near +/-CHECKMATE; use mate_in() to read them.
+    """
+    depth = cfg["ai"].get("eval_depth", 2) if depth is None else depth
+    if gamestate.checkmate:
+        return -CHECKMATE if gamestate.white_to_move else CHECKMATE
+    if gamestate.stalemate or gamestate.rep_stalemate or gamestate.move_draw or gamestate.ins_draw:
+        return 0
+    turn_multiplier = 1 if gamestate.white_to_move else -1
+    score = find_move_v4(gamestate, valid_moves, depth, -CHECKMATE, CHECKMATE, turn_multiplier,
+                         zobrist_keys, transposition_table)
+    gamestate.getValidMoves()  # the search leaves the game-over flags of its last node; restore them
+    return turn_multiplier * score
+
+
+def mate_in(score):
+    """Full moves until mate for a mate score (positive: white mates), or None for a normal score."""
+    if abs(score) < CHECKMATE - 100:
+        return None
+    plies = CHECKMATE - abs(score)
+    moves = (plies + 1) // 2
+    return moves if score > 0 else -moves
+
+
 def find_best_move(gamestate, valid_moves, zobrist_keys, transposition_table, print_usage):
     global next_move, transposition_table_hits
     transposition_table_hits = 0
