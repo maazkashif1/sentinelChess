@@ -111,7 +111,7 @@ class GameState:
         if move.is_enpassant_move:
             self.board[move.start_row][move.end_col] = "--" 
 
-        if move.piece_moved[1] == "p" and abs(move.start_row - move.end_row) == 2:  
+        if move.piece_moved[1] in "pS" and abs(move.start_row - move.end_row) == 2:  # pawn or sentinel double step  
             self.enpassant_possible = ((move.start_row + move.end_row) // 2, move.start_col)
         else:
             self.enpassant_possible = ()
@@ -504,7 +504,7 @@ class GameState:
             if not piece_pinned or pin_direction == (move_amount, -1):
                 if self.board[row + move_amount][col - 1][0] == enemy_color and self.board[row + move_amount][col - 1][1] != "S":
                     self.addPawnMove(moves, (row, col), (row + move_amount, col - 1))
-                if (row + move_amount, col - 1) == self.enpassant_possible:
+                if (row + move_amount, col - 1) == self.enpassant_possible and self.board[row][col - 1] == enemy_color + "p":
                     attacking_piece = blocking_piece = False
                     if king_row == row:
                         if king_col < col:  
@@ -528,7 +528,7 @@ class GameState:
             if not piece_pinned or pin_direction == (move_amount, +1):
                 if self.board[row + move_amount][col + 1][0] == enemy_color and self.board[row + move_amount][col + 1][1] != "S":
                     self.addPawnMove(moves, (row, col), (row + move_amount, col + 1))
-                if (row + move_amount, col + 1) == self.enpassant_possible:
+                if (row + move_amount, col + 1) == self.enpassant_possible and self.board[row][col + 1] == enemy_color + "p":
                     attacking_piece = blocking_piece = False
                     if king_row == row:
                         if king_col < col:  
@@ -608,7 +608,7 @@ class GameState:
                 continue
             if piece_pinned and pin_direction != d:
                 return None
-            if board[row][end_col] != enemy_color + "p":
+            if board[row][end_col] not in (enemy_color + "p", enemy_color + "S"):
                 return None
             # both the sentinel and the captured pawn leave this rank: make sure
             # that does not open a rook or queen line onto the king
@@ -782,7 +782,7 @@ class Move:
                 self.piece_moved == "bp" and self.end_row == 7)
         self.is_enpassant_move = is_enpassant_move
         if self.is_enpassant_move:
-            self.piece_captured = "wp" if self.piece_moved == "bp" else "bp"
+            self.piece_captured = board[self.start_row][self.end_col]  # the pawn or sentinel beside us
         self.is_castle_move = is_castle_move
 
         self.is_capture = self.piece_captured != "--"

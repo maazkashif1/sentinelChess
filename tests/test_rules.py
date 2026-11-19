@@ -131,3 +131,17 @@ def test_promotion_offers_every_piece():
     assert gs.board[0][1] == "wN" and str(knight) == "b8=N"
     gs.undoMove()
     assert gs.board[1][1] == "wp" and gs.board[0][1] == "--"
+
+
+def test_sentinel_double_step_can_be_taken_en_passant_by_a_sentinel_only():
+    for attacker, can_take in (("S", True), ("P", False)):
+        gs = ChessEngine.GameState(fen=f"4k3/3s4/8/4{attacker}3/8/8/8/4K3 b - - 0 1")
+        play(gs, (1, 3, 3, 3))  # black sentinel d7-d5
+        assert gs.enpassant_possible == (2, 3)
+        captures = [m for m in gs.getValidMoves() if m.is_enpassant_move]
+        assert bool(captures) is can_take, attacker
+        if can_take:
+            gs.makeMove(captures[0])
+            assert gs.board[3][3] == "--" and captures[0].piece_captured == "bS"
+            gs.undoMove()
+            assert gs.board[3][3] == "bS"
