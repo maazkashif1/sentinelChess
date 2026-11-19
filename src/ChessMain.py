@@ -490,7 +490,7 @@ class Game:
                                 elif button_text == "Quit":
                                     return "quit"
                     elif not game_over and human_turn:
-                        location = pygame.mouse.get_pos()
+                        location = event.pos
                         col = location[0] // SQ_SIZE
                         row = location[1] // SQ_SIZE
 
