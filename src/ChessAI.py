@@ -204,57 +204,29 @@ def score_board_v4(gamestate):
     elif gamestate.stalemate:
         return STALEMATE
 
+    score = score_material_and_position(gamestate.board)
+
+    # small adjustments for the side that just moved
+    move_log = gamestate.move_log
+    if move_log:
+        sign = -1 if gamestate.white_to_move else 1  # +1 when white made the last move
+        if move_log[-1].is_castle_move:
+            score += sign * CASTLING_SCORE
+        if len(move_log) > 3 and move_log[-1] == move_log[-3]:
+            score -= sign * MOVE_REP_PUNISH
+
+    return score
+
+
+def score_material_and_position(board):
     score = 0
-
-    for row in range(len(gamestate.board)):
-        for col in range(len(gamestate.board[row])):
-            square = gamestate.board[row][col]
+    for row in range(8):
+        board_row = board[row]
+        for col in range(8):
+            square = board_row[col]
             if square != "--":
-                color = square[0]
-                type = square[1]
-
-                if color == "w":
-                    piece_position_score = piece_position_scores["w" + type][row][col]
-                    in_check, pins, checks = gamestate.checkForPinsAndChecks()
-
-                    score += piece_value[square[1]] + piece_position_score * POSITION_WEIGHT
-
-                    if len(gamestate.move_log) > 3:
-                        if str(gamestate.move_log[-1]) == str(gamestate.move_log[-3]):
-                            score -= MOVE_REP_PUNISH
-                        if str(gamestate.move_log[-1]) == "Kc1":
-                            score += CASTLING_SCORE
-                        elif str(gamestate.move_log[-1]) == "Kg1":
-                            score += CASTLING_SCORE
-
-                    """if in_check:
-                        score -= cfg["ai"]["check_punish"]
-
-                    if (len(pins) and len(checks)) > 0:
-                        for punish in range(len(pins)):
-                            score -= punish + 1
-
-                        for punish in range(len(checks)):
-                            score -= punish + 2"""
-
-                elif color == "b":
-                    piece_position_score = piece_position_scores["b" + type][row][col]
-
-                    score -= piece_value[square[1]] + piece_position_score * POSITION_WEIGHT
-
-                    if len(gamestate.move_log) > 3:
-                        if str(gamestate.move_log[-1]) == str(gamestate.move_log[-3]):
-                            score += MOVE_REP_PUNISH
-                        if str(gamestate.move_log[-1]) == "Kg8":
-                            score -= CASTLING_SCORE
-                        elif str(gamestate.move_log[-1]) == "Kc8":
-                            score -= CASTLING_SCORE
-
-                if gamestate.move_log[-1] == ("Kc1" or "Kg1" or "Kc8" or "Kg8" or "0-0" or "0-0-0"):
-                    print("Found King Castle Move")
-                    with open("king_moves.txt", "a") as file:
-                        file.write(f"King Move {gamestate.move_log[-1]} had a score of {score}\n")
-
+                value = piece_value[square[1]] + piece_position_scores[square][row][col] * POSITION_WEIGHT
+                score += value if square[0] == "w" else -value
     return score
 
 
