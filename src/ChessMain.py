@@ -220,6 +220,12 @@ class UI:
             text_object = eval_font.render(str(evaluation_score), True, pygame.Color("Black"))
             win.blit(text_object, (732, 0))
 
+    def to_screen(self, row, col):
+        """Map board coordinates to on-screen coordinates, honouring a flipped board."""
+        if self.flipped:
+            return DIMENSION - 1 - row, DIMENSION - 1 - col
+        return row, col
+
     def animate_move(self, move, win, board, clock):
         global colors
         delta_row = move.end_row - move.start_row
@@ -227,21 +233,23 @@ class UI:
         frames_per_square = 10  # frames to move one square
         frame_count = (abs(delta_row) + abs(delta_col)) * frames_per_square
 
+        end_row, end_col = self.to_screen(move.end_row, move.end_col)
         for frame in range(frame_count + 1):
-            row, col = (
-            move.start_row + delta_row * frame / frame_count, move.start_col + delta_col * frame / frame_count)
+            row, col = self.to_screen(move.start_row + delta_row * frame / frame_count,
+                                      move.start_col + delta_col * frame / frame_count)
             self.draw_board(win)
             self.draw_pieces(win, board)
             # erase the piece moved from ending square
             color = colors[(move.end_row + move.end_col) % 2]
-            end_square = pygame.Rect(move.end_col * SQ_SIZE, move.end_row * SQ_SIZE, SQ_SIZE, SQ_SIZE)
+            end_square = pygame.Rect(end_col * SQ_SIZE, end_row * SQ_SIZE, SQ_SIZE, SQ_SIZE)
             pygame.draw.rect(win, color, end_square)
 
             # erase taken piece after animation is done
             if move.piece_captured != "--":
                 if move.is_enpassant_move:
                     en_passant_row = (move.end_row + 1) if move.piece_captured[0] == "b" else (move.end_row - 1)
-                    end_square = pygame.Rect(move.end_col * SQ_SIZE, en_passant_row * SQ_SIZE, SQ_SIZE, SQ_SIZE)
+                    ep_row, ep_col = self.to_screen(en_passant_row, move.end_col)
+                    end_square = pygame.Rect(ep_col * SQ_SIZE, ep_row * SQ_SIZE, SQ_SIZE, SQ_SIZE)
                     win.blit(PIECES[move.piece_captured], end_square)
 
             # draw selected piece
