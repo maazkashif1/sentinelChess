@@ -34,7 +34,7 @@ LAST_MOVE_COLOR = (205, 210, 106, 120)
 HINT_COLOR = ACCENT + (150,)
 MOVE_DOT_COLOR = (20, 20, 20, 95)
 
-SOUND_NAMES = ["capture", "castle", "game-end", "game-start", "illegal", "move-check", "move-normal", "promote", "tenseconds"]
+SOUND_NAMES = ["capture", "castle", "game-end", "game-start", "illegal", "move-check", "move-normal", "promote"]
 
 
 def load_sounds():
@@ -45,6 +45,11 @@ def load_sounds():
 
 
 SOUNDS = load_sounds()
+
+
+def play_sound(name):
+    if name in SOUNDS:
+        SOUNDS[name].play()
 
 
 def play_move_sound(gamestate, move):
@@ -59,8 +64,7 @@ def play_move_sound(gamestate, move):
         name = "move-check"
     else:
         name = "move-normal"
-    if name in SOUNDS:
-        SOUNDS[name].play()
+    play_sound(name)
 
 
 def wrap(text, text_font, width):
@@ -425,6 +429,7 @@ class Game:
                 if flag:
                     match.game_over = True
                     ui.open_modal(title, subtitle)
+                    play_sound("game-end")
                     return
 
         def undo():
@@ -444,6 +449,7 @@ class Game:
         def restart():
             ui.modal_active = False
             match.reset()
+            play_sound("game-start")
             check_game_end()
 
         def resign():
@@ -454,6 +460,7 @@ class Game:
             white_resigns = humans[0] if len(humans) == 1 else gamestate.white_to_move
             match.game_over = True
             ui.open_modal("Resigned", ("Black" if white_resigns else "White") + " wins")
+            play_sound("game-end")
 
         def best_move():
             if match.game_over:
@@ -474,6 +481,7 @@ class Game:
         keys = {pygame.K_SPACE: undo, pygame.K_u: undo, pygame.K_f: flip, pygame.K_e: toggle_eval,
                 pygame.K_b: best_move, pygame.K_r: restart}
 
+        play_sound("game-start")
         check_game_end()  # a custom start position may already be decided
         while True:
             human_turn = self.is_human(match.gamestate.white_to_move)
@@ -543,6 +551,10 @@ class Game:
                 gamestate.makeMove(valid_move)
                 return valid_move
         # not a legal move: treat the second click as a new selection
+        own = "w" if gamestate.white_to_move else "b"
+        start_row, start_col = match.player_clicks[0]
+        if gamestate.board[start_row][start_col][0] == own and gamestate.board[row][col][0] != own:
+            play_sound("illegal")  # tried to move a piece somewhere it can't go
         match.player_clicks = [match.square_selected]
         return None
 
