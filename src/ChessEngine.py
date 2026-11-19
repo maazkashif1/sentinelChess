@@ -42,6 +42,15 @@ class GameState:
             self.load_fen_state(fen)
         self.castle_rights_log = [CastleRights(self.current_castling_rights.wks, self.current_castling_rights.bks,
                                                self.current_castling_rights.wqs, self.current_castling_rights.bqs)]
+        # how often each position has occurred, for threefold repetition
+        self.position_log = [self.positionKey()]
+        self.position_counts = {self.position_log[0]: 1}
+
+    def positionKey(self):
+        """Identify a position for repetition: board, side to move, castling rights, en passant square."""
+        rights = self.current_castling_rights
+        return ("".join(["".join(row) for row in self.board]), self.white_to_move,
+                rights.wks, rights.wqs, rights.bks, rights.bqs, self.enpassant_possible)
 
     def load_fen_state(self, fen):
         """Apply side to move, castling rights, en passant square and king squares from a FEN string."""
@@ -111,9 +120,15 @@ class GameState:
         self.castle_rights_log.append(CastleRights(self.current_castling_rights.wks, self.current_castling_rights.bks,
                                                    self.current_castling_rights.wqs, self.current_castling_rights.bqs))
 
+        key = self.positionKey()
+        self.position_log.append(key)
+        self.position_counts[key] = self.position_counts.get(key, 0) + 1
+
     def undoMove(self):
         if len(self.move_log) != 0:  # make sure that there is a move to undo
             move = self.move_log.pop()
+            key = self.position_log.pop()
+            self.position_counts[key] -= 1
             self.board[move.start_row][move.start_col] = move.piece_moved
             self.board[move.end_row][move.end_col] = move.piece_captured
             self.white_to_move = not self.white_to_move  # swap players
@@ -278,8 +293,8 @@ class GameState:
             self.checkmate = False
             self.stalemate = False
 
-        if len(self.move_log) > 6 and self.move_log[-1] == self.move_log[-3] == self.move_log[-5]:
-            self.rep_stalemate = True
+        # threefold repetition: the current position has occurred three times
+        self.rep_stalemate = self.position_counts[self.position_log[-1]] >= 3
 
         self.current_castling_rights = temp_castle_rights
         return moves

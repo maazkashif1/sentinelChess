@@ -68,3 +68,23 @@ def test_undo_restores_castling_rights():
         gs.makeMove(move)
         gs.undoMove()
     assert gs.current_castling_rights.wks and gs.current_castling_rights.wqs
+
+
+def play(gs, *moves):
+    """Play moves given as (start_row, start_col, end_row, end_col)."""
+    for sr, sc, er, ec in moves:
+        gs.makeMove(next(m for m in gs.getValidMoves() if (m.start_row, m.start_col, m.end_row, m.end_col) == (sr, sc, er, ec)))
+    gs.getValidMoves()
+
+
+def test_threefold_repetition_is_by_position():
+    gs = ChessEngine.GameState()
+    shuffle = [(7, 6, 5, 5), (0, 6, 2, 5), (5, 5, 7, 6), (2, 5, 0, 6)]  # Nf3 Nf6 Ng1 Ng8
+    play(gs, *shuffle)
+    assert not gs.rep_stalemate  # start position seen twice
+    play(gs, *shuffle)
+    assert gs.rep_stalemate  # three times
+    gs.undoMove()
+    gs.getValidMoves()
+    assert not gs.rep_stalemate
+
