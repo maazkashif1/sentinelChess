@@ -204,3 +204,11 @@ def test_sentinel_pieces_give_check_and_pin():
     assert gs.in_check and gs.inCheck()
     gs = ChessEngine.GameState(fen="6k1/8/8/w7/8/8/3N4/4K3 w - - 0 1")  # sentinel bishop pins the d2 knight
     assert not any(m.piece_moved == "wN" for m in gs.getValidMoves())
+
+
+def test_only_the_king_moves_in_double_check():
+    # rook e8 and knight d3 both give check; capturing the knight with the a3 rook is not enough
+    gs = ChessEngine.GameState(fen="4r1k1/8/8/8/8/R2n4/8/4K3 w - - 0 1")
+    moves = gs.getValidMoves()
+    assert len(gs.checks) == 2
+    assert moves and all(m.piece_moved == "wK" for m in moves)

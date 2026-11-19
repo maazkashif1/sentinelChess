@@ -301,7 +301,8 @@ class GameState:
                             break
                 valid_squares = set(valid_squares)
                 moves = [m for m in moves if m.piece_moved[1] == "K" or (m.end_row, m.end_col) in valid_squares]
-            else:  
+            else:  # double check: only the king may move
+                moves = []
                 self.getKingMoves(king_row, king_col, moves)
         else:  
             if self.white_to_move:
