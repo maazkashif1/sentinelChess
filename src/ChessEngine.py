@@ -132,7 +132,8 @@ class GameState:
 
             # undo castle rights
             self.castle_rights_log.pop()  # get rid of the new castle rights from the move we are undoing
-            self.current_castling_rights = self.castle_rights_log[-1]  # set the current castle rights to the last one in the list
+            # copy, so later moves cannot mutate the logged entry in place
+            self.current_castling_rights = self.castle_rights_log[-1].copy()
             # undo the castle move
             if move.is_castle_move:
                 if move.end_col - move.start_col == 2:  # king-side
@@ -700,6 +701,9 @@ class CastleRights:
         self.bks = bks
         self.wqs = wqs
         self.bqs = bqs
+
+    def copy(self):
+        return CastleRights(self.wks, self.bks, self.wqs, self.bqs)
 
 
 class Move:

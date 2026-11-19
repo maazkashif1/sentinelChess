@@ -57,3 +57,14 @@ def test_sentinel_shields_pawn_from_en_passant():
     for attacker in ("P", "S"):
         gs = ChessEngine.GameState(fen=f"4k3/8/2s5/3p{attacker}3/8/8/8/4K3 w - d6 0 1")
         assert not any(m.is_enpassant_move for m in gs.getValidMoves()), attacker
+
+
+def test_undo_restores_castling_rights():
+    gs = ChessEngine.GameState(fen="r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1")
+    moves = gs.getValidMoves()
+    rook_move = next(m for m in moves if m.piece_moved == "wR")
+    king_move = next(m for m in moves if m.piece_moved == "wK" and not m.is_castle_move)
+    for move in (rook_move, king_move):
+        gs.makeMove(move)
+        gs.undoMove()
+    assert gs.current_castling_rights.wks and gs.current_castling_rights.wqs
