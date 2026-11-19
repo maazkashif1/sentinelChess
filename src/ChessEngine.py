@@ -2,6 +2,8 @@ import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 
+from config import asset_path
+
 
 class GameState:
     def __init__(self, fen=None):
@@ -46,7 +48,7 @@ class GameState:
         sounds = ["capture", "castle", "game-end", "game-start", "illegal", "move-check", "move-normal", "promote", "tenseconds"]
 
         for sound in sounds:
-            self.SOUNDS[sound] = pygame.mixer.Sound(os.path.join("sounds", f"{sound}.mp3"))
+            self.SOUNDS[sound] = pygame.mixer.Sound(asset_path("sounds", f"{sound}.mp3"))
 
     def makeMove(self, move):
         self.board[move.start_row][move.start_col] = "--"

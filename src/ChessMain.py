@@ -1,17 +1,16 @@
 import datetime
 
+import os
+
 import ChessEngine
 import ChessAI
-import yaml
-import os
+from config import asset_path, load_config
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 
 pygame.init()
 
-# load the config
-with open("config.yaml") as f:
-    cfg = yaml.load(f, Loader=yaml.FullLoader)
+cfg = load_config()
 
 BOARD_WIDTH = 512
 BOARD_HEIGHT = 512
@@ -76,12 +75,12 @@ class UI:
     def load_pieces(self):
         pieces = ["bR", "bB", "bN", "bQ", "bK", "bp", "wR", "wB", "wN", "wQ", "wK", "wp", "wS", "bS"]
         for piece in pieces:
-            PIECES[piece] = pygame.transform.scale(pygame.image.load(os.path.join(f"pieces/{PIECE_PACKAGE}", f"{piece}.png")), (SQ_SIZE, SQ_SIZE))
+            PIECES[piece] = pygame.transform.scale(pygame.image.load(asset_path("pieces", PIECE_PACKAGE, f"{piece}.png")), (SQ_SIZE, SQ_SIZE))
 
     def load_images(self):
-        images = [image for image in os.listdir("imgs")]
+        images = os.listdir(asset_path("imgs"))
         for img in images:
-            IMGS[img] = pygame.image.load(os.path.join("imgs", img))
+            IMGS[img] = pygame.image.load(asset_path("imgs", img))
 
     def draw_game_state(self, win, gamestate, valid_moves, square_selected, move_log_font, eval_font):
         self.draw_board(win)

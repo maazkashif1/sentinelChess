@@ -1,9 +1,8 @@
 import random
-import yaml
 
-# load the config
-with open("config.yaml") as f:
-    cfg = yaml.load(f, Loader=yaml.FullLoader)
+from config import load_config
+
+cfg = load_config()
 
 knight_scores = [[-50, -40, -30, -30, -30, -30, -40, -50],
                  [-40, -20, 0, 0, 0, 0, -20, -40],
