@@ -273,7 +273,7 @@ class GameState:
         return self.isAttackedBy(row, col, "w")
 
     def isAttackedBy(self, row, col, color):
-        """Return True if a piece of `color` attacks the occupied square (row, col).
+        """Return True if a piece of `color` attacks the square (row, col).
 
         Scans outwards from the target square instead of generating every
         opponent move (https://www.chessprogramming.org/Square_Attacked_By).
@@ -308,13 +308,8 @@ class GameState:
         return False
 
     def squareUnderAttack(self, row, col):
-        self.white_to_move = not self.white_to_move  # switch to opponent's point of view
-        opponents_moves = self.getAllPossibleMoves()
-        self.white_to_move = not self.white_to_move
-        for move in opponents_moves:
-            if move.end_row == row and move.end_col == col:  # square is under attack
-                return True
-        return False
+        """Return True if the side not to move attacks (row, col)."""
+        return self.isAttackedBy(row, col, "b" if self.white_to_move else "w")
 
     def isDefendedBySentinel(self, row, col):
         sentinel = self.board[row][col][0] + "S"
