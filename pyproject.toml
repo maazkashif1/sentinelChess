@@ -12,6 +12,9 @@ dependencies = [
 dev = [
     "pytest>=8",
 ]
+art = [
+    "pillow>=11",
+]
 
 [tool.uv]
 package = false
