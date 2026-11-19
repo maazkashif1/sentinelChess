@@ -106,7 +106,7 @@ class UI:
 
     # loading in the images and scaling them to be the size of the square
     def load_pieces(self):
-        pieces = ["bR", "bB", "bN", "bQ", "bK", "bp", "wR", "wB", "wN", "wQ", "wK", "wp", "wS", "bS"]
+        pieces = [color + piece for color in "wb" for piece in "KQRBNp" + ChessEngine.SENTINEL_FAMILY]
         for piece in pieces:
             PIECES[piece] = pygame.transform.scale(pygame.image.load(asset_path("pieces", PIECE_PACKAGE, f"{piece}.png")), (SQ_SIZE, SQ_SIZE))
 
@@ -226,8 +226,10 @@ class UI:
             return DIMENSION - 1 - row, DIMENSION - 1 - col
         return row, col
 
-    def choose_promotion(self, win, color, row, col):
+    def choose_promotion(self, win, color, row, col, sentinel=False):
         """Show the four promotion pieces on the promotion file and wait for a click.
+
+        A promoting sentinel is offered the sentinel versions of the pieces.
 
         Returns "Q", "R", "B" or "N", or None if the player cancels (Esc or a click elsewhere).
         """
@@ -248,7 +250,8 @@ class UI:
             for piece, rect in options:
                 pygame.draw.rect(win, "white", rect)
                 pygame.draw.rect(win, "black", rect, 2)
-                win.blit(PIECES[color + piece], rect)
+                icon = ChessEngine.SENTINEL_PROMOTIONS[piece] if sentinel else piece
+                win.blit(PIECES[color + icon], rect)
             pygame.display.flip()
             clock.tick(MAX_FPS)
 
@@ -537,7 +540,8 @@ class Game:
                                 if move == valid_move:
                                     if valid_move.is_pawn_promotion:
                                         piece = ui.choose_promotion(win, valid_move.piece_moved[0],
-                                                                    valid_move.end_row, valid_move.end_col)
+                                                                    valid_move.end_row, valid_move.end_col,
+                                                                    sentinel=valid_move.piece_moved[1] == "S")
                                         if piece is None:  # picker cancelled
                                             break
                                         chosen = ChessEngine.Move(player_clicks[0], player_clicks[1], gamestate.board,
