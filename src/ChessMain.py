@@ -467,7 +467,7 @@ class Game:
                         for button_text, button_rect in ui.modal_buttons:
                             if button_rect.collidepoint(event.pos):
                                 if button_text == "Restart":
-                                    gamestate = ChessEngine.GameState()
+                                    gamestate = ChessEngine.GameState(fen=self.start_fen)
                                     valid_moves = gamestate.getValidMoves()
                                     square_selected = ()
                                     player_clicks = []
@@ -521,7 +521,7 @@ class Game:
                             valid_moves = gamestate.getValidMoves()
 
                     elif event.key == pygame.K_r:
-                        gamestate = ChessEngine.GameState()
+                        gamestate = ChessEngine.GameState(fen=self.start_fen)
                         valid_moves = gamestate.getValidMoves()
                         square_selected = ()
                         player_clicks = []
