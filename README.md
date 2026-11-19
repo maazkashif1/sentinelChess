@@ -23,6 +23,18 @@ uv run pytest                    # rules, move generation and AI tests
 
 Settings such as colours, human/AI players, the starting FEN and AI depth live in `src/config.yaml`.
 
+## Controls
+
+Click a piece, then a highlighted square. The sidebar buttons have keyboard shortcuts:
+
+| Key | Action |
+| --- | --- |
+| Space / U | Undo (back to your turn when playing the AI) |
+| F | Flip board |
+| E | Show or hide the eval bar |
+| B | Show the engine's best move |
+| R | Restart |
+
 ## Engine
 
 `src/ChessAI.py` (`version: "v4"`) uses these standard techniques:
