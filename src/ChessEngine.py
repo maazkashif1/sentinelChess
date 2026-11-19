@@ -32,6 +32,9 @@ class GameState:
         self.checkmate = False
         self.stalemate = False
         self.rep_stalemate = False
+        self.move_draw = False  # 50-move rule
+        self.halfmove_clock = 0  # plies since the last capture or pawn/sentinel move
+        self.halfmove_log = []
         self.in_check = False
         self.pins = []
         self.checks = []
@@ -74,6 +77,9 @@ class GameState:
         self.current_castling_rights = CastleRights(can_castle("K", 7, 7, "w"), can_castle("k", 0, 7, "b"),
                                                     can_castle("Q", 7, 0, "w"), can_castle("q", 0, 0, "b"))
 
+        if len(fields) > 4 and fields[4].isdigit():
+            self.halfmove_clock = int(fields[4])
+
         if enpassant != "-" and len(enpassant) == 2:
             self.enpassant_possible = (8 - int(enpassant[1]), "abcdefgh".index(enpassant[0]))
         self.enpassant_possible_log = [self.enpassant_possible]
@@ -83,7 +89,12 @@ class GameState:
         self.board[move.end_row][move.end_col] = move.piece_moved
         
         self.move_log.append(move)
-        
+
+        self.halfmove_log.append(self.halfmove_clock)
+        if move.piece_captured != "--" or move.piece_moved[1] in "pS":
+            self.halfmove_clock = 0
+        else:
+            self.halfmove_clock += 1
         self.white_to_move = not self.white_to_move
         
         if move.piece_moved == "wK":
@@ -129,6 +140,7 @@ class GameState:
             move = self.move_log.pop()
             key = self.position_log.pop()
             self.position_counts[key] -= 1
+            self.halfmove_clock = self.halfmove_log.pop()
             self.board[move.start_row][move.start_col] = move.piece_moved
             self.board[move.end_row][move.end_col] = move.piece_captured
             self.white_to_move = not self.white_to_move  # swap players
@@ -295,6 +307,8 @@ class GameState:
 
         # threefold repetition: the current position has occurred three times
         self.rep_stalemate = self.position_counts[self.position_log[-1]] >= 3
+        # 50-move rule: 100 plies without a capture or a pawn/sentinel move
+        self.move_draw = self.halfmove_clock >= 100
 
         self.current_castling_rights = temp_castle_rights
         return moves

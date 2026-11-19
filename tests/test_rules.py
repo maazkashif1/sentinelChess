@@ -88,3 +88,20 @@ def test_threefold_repetition_is_by_position():
     gs.getValidMoves()
     assert not gs.rep_stalemate
 
+
+
+def test_fifty_move_rule():
+    gs = ChessEngine.GameState(fen="4k3/8/8/8/8/8/8/R3K3 w - - 99 80")
+    gs.getValidMoves()
+    assert not gs.move_draw
+    play(gs, (7, 0, 6, 0))  # quiet rook move: 100th ply
+    assert gs.move_draw
+    gs.undoMove()
+    gs.getValidMoves()
+    assert not gs.move_draw
+
+
+def test_pawn_or_sentinel_move_resets_fifty_move_count():
+    gs = ChessEngine.GameState(fen="4k3/8/8/8/8/8/3S4/4K3 w - - 99 80")
+    play(gs, (6, 3, 5, 3))
+    assert gs.halfmove_clock == 0 and not gs.move_draw
