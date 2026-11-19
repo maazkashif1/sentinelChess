@@ -226,6 +226,32 @@ class UI:
             return DIMENSION - 1 - row, DIMENSION - 1 - col
         return row, col
 
+    def choose_promotion(self, win, color, row, col):
+        """Show the four promotion pieces on the promotion file and wait for a click.
+
+        Returns "Q", "R", "B" or "N", or None if the player cancels (Esc or a click elsewhere).
+        """
+        screen_row, screen_col = self.to_screen(row, col)
+        step = 1 if screen_row == 0 else -1  # stack the choices towards the centre of the board
+        options = [(piece, pygame.Rect(screen_col * SQ_SIZE, (screen_row + i * step) * SQ_SIZE, SQ_SIZE, SQ_SIZE))
+                   for i, piece in enumerate(ChessEngine.PROMOTION_PIECES)]
+        clock = pygame.time.Clock()
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.event.post(event)  # let the main loop close the game
+                    return None
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    return None
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    return next((piece for piece, rect in options if rect.collidepoint(event.pos)), None)
+            for piece, rect in options:
+                pygame.draw.rect(win, "white", rect)
+                pygame.draw.rect(win, "black", rect, 2)
+                win.blit(PIECES[color + piece], rect)
+            pygame.display.flip()
+            clock.tick(MAX_FPS)
+
     def animate_move(self, move, win, board, clock):
         global colors
         delta_row = move.end_row - move.start_row
@@ -509,6 +535,14 @@ class Game:
                             move = ChessEngine.Move(player_clicks[0], player_clicks[1], gamestate.board)
                             for valid_move in valid_moves:
                                 if move == valid_move:
+                                    if valid_move.is_pawn_promotion:
+                                        piece = ui.choose_promotion(win, valid_move.piece_moved[0],
+                                                                    valid_move.end_row, valid_move.end_col)
+                                        if piece is None:  # picker cancelled
+                                            break
+                                        chosen = ChessEngine.Move(player_clicks[0], player_clicks[1], gamestate.board,
+                                                                  promotion_piece=piece)
+                                        valid_move = next(m for m in valid_moves if m == chosen)
                                     gamestate.makeMove(valid_move)
                                     play_move_sound(gamestate, valid_move)
                                     move_made = True
