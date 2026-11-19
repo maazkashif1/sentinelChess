@@ -90,10 +90,19 @@ piece_position_scores = {"wN": knight_scores,
                          "wK": king_scores,
                          "bK": king_scores[::-1],
                          "wS": sentinel_pawn_scores,
-                         "bS": sentinel_pawn_scores[::-1]}
+                         "bS": sentinel_pawn_scores[::-1],
+                         # promoted sentinels use the tables of the piece they move like
+                         "wG": queen_scores,
+                         "bG": queen_scores[::-1],
+                         "wT": rook_scores,
+                         "bT": rook_scores[::-1],
+                         "wW": bishop_scores,
+                         "bW": bishop_scores[::-1],
+                         "wH": knight_scores,
+                         "bH": knight_scores[::-1]}
 
 piece_value = PIECE_VALUES
-pieces = ["bB", "bK", "bN", "bp", "bQ", "bR", "wB", "wK", "wN", "wp", "wQ", "wR", "wS", "bS"]
+pieces = list(piece_position_scores)  # every piece code, for Zobrist keys
 
 CHECKMATE = cfg["ai"]["points_checkmate"]
 CASTLING_SCORE = cfg["ai"]["castling_score"]
