@@ -435,10 +435,6 @@ class Game:
 
         rand = 0
 
-        # Track previous state for AI games
-        previous_state = None
-        is_ai_game = not (player_one and player_two)
-
         run = True
         while run:
             human_turn = (gamestate.white_to_move and player_one) or (not gamestate.white_to_move and player_two)
@@ -479,7 +475,6 @@ class Game:
                                     animate = False
                                     game_over = False
                                     ui.modal_active = False
-                                    previous_state = None
                                 elif button_text == "Quit":
                                     return "quit"
                     elif not game_over and human_turn:
@@ -500,47 +495,25 @@ class Game:
 
                         if len(player_clicks) == 2:
                             move = ChessEngine.Move(player_clicks[0], player_clicks[1], gamestate.board)
-                            for i in range(len(valid_moves)):
-                                if move == valid_moves[i]:
-                                    # Save state before making move in AI games
-                                    if is_ai_game:
-                                        previous_state = {
-                                            'board': [row[:] for row in gamestate.board],
-                                            'white_to_move': gamestate.white_to_move,
-                                            'move_log': gamestate.move_log.copy(),
-                                            'white_king_location': gamestate.white_king_location,
-                                            'black_king_location': gamestate.black_king_location,
-                                            'enpassant_possible': gamestate.enpassant_possible,
-                                            'current_castling_rights': gamestate.current_castling_rights
-                                        }
-                                    gamestate.makeMove(valid_moves[i])
-                                    play_move_sound(gamestate, valid_moves[i])
+                            for valid_move in valid_moves:
+                                if move == valid_move:
+                                    gamestate.makeMove(valid_move)
+                                    play_move_sound(gamestate, valid_move)
                                     move_made = True
                                     animate = True
                                     square_selected = ()
                                     player_clicks = []
+                                    break  # never apply the same click twice
                             if not move_made:
                                 player_clicks = [square_selected]
 
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_SPACE:
                         if len(gamestate.move_log) > 0:
-                            if is_ai_game and previous_state is not None:
-                                # Restore previous state for AI games
-                                gamestate.board = [row[:] for row in previous_state['board']]
-                                gamestate.white_to_move = previous_state['white_to_move']
-                                gamestate.move_log = previous_state['move_log'].copy()
-                                gamestate.white_king_location = previous_state['white_king_location']
-                                gamestate.black_king_location = previous_state['black_king_location']
-                                gamestate.enpassant_possible = previous_state['enpassant_possible']
-                                gamestate.current_castling_rights = previous_state['current_castling_rights']
-                                previous_state = None
-                            else:
-                                # Normal undo for human vs human
-                                if len(gamestate.move_log) > 0:
-                                    gamestate.undoMove()
-                                if len(gamestate.move_log) > 0:
-                                    gamestate.undoMove()
+                            # take back the last two plies (your move and the reply)
+                            gamestate.undoMove()
+                            if len(gamestate.move_log) > 0:
+                                gamestate.undoMove()
                             move_made = True
                             animate = False
                             game_over = False
@@ -556,7 +529,6 @@ class Game:
                         animate = False
                         game_over = False
                         ui.modal_active = False
-                        previous_state = None
 
             # AI logic
             if not game_over and not human_turn:
