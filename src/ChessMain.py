@@ -32,6 +32,11 @@ IMGS = {}
 UI_FONT = pygame.font.SysFont("Arial", 32)
 MOVE_LOG_FONT = EVAL_FONT = pygame.font.SysFont("Arial", 12)
 FEN_FONT = pygame.font.SysFont("Arial", 10)
+# fonts are created once: SysFont lookups are slow and were repeated every frame
+END_TEXT_FONT = pygame.font.SysFont("Helvetica", 40, True, False)
+MODAL_TITLE_FONT = pygame.font.SysFont("Helvetica", 36, True, False)
+SUBTITLE_FONT = pygame.font.SysFont("Helvetica", 20, True, False)
+BUTTON_FONT = pygame.font.SysFont("Helvetica", 18, True, False)
 
 SOUND_NAMES = ["capture", "castle", "game-end", "game-start", "illegal", "move-check", "move-normal", "promote", "tenseconds"]
 
@@ -206,8 +211,7 @@ class UI:
         eval_bar_rect = pygame.Rect(-BOARD_WIDTH, 0, EVAL_BAR_WIDTH, EVAL_BAR_HEIGHT)
         pygame.draw.rect(win, pygame.Color("white"), eval_bar_rect)
 
-        eval = ChessEngine.GameState()
-        evaluation_score = eval.evaluate(gamestate.board)
+        evaluation_score = gamestate.evaluate(gamestate.board)
 
         if evaluation_score < 0:
             text_object = eval_font.render(str(evaluation_score), True, pygame.Color("Black"))
@@ -253,7 +257,7 @@ class UI:
         win.blit(overlay, (0, 0))
 
         # Draw the main text
-        font = pygame.font.SysFont("Helvetica", 40, True, False)
+        font = END_TEXT_FONT
         text_object = font.render(text, True, pygame.Color("white"))
         text_loc = pygame.Rect(0, 0, BOARD_WIDTH, BOARD_HEIGHT).move(
             BOARD_WIDTH / 2 - text_object.get_width() / 2,
@@ -262,7 +266,7 @@ class UI:
         win.blit(text_object, text_loc)
 
         # Draw a subtitle with instructions
-        subtitle_font = pygame.font.SysFont("Helvetica", 20, True, False)
+        subtitle_font = SUBTITLE_FONT
         subtitle = "Press 'R' to restart or 'Space' to undo"
         subtitle_object = subtitle_font.render(subtitle, True, pygame.Color("white"))
         subtitle_loc = pygame.Rect(0, 0, BOARD_WIDTH, BOARD_HEIGHT).move(
@@ -294,14 +298,14 @@ class UI:
         pygame.draw.rect(win, "black", (modal_x, modal_y, modal_width, modal_height), 3)
 
         # Draw main text
-        font = pygame.font.SysFont("Helvetica", 36, True, False)
+        font = MODAL_TITLE_FONT
         text_object = font.render(text, True, pygame.Color("black"))
         text_loc = (modal_x + (modal_width - text_object.get_width()) // 2,
                    modal_y + 40)
         win.blit(text_object, text_loc)
 
         # Draw subtext
-        sub_font = pygame.font.SysFont("Helvetica", 20, True, False)
+        sub_font = SUBTITLE_FONT
         subtext_object = sub_font.render(subtext, True, pygame.Color("black"))
         subtext_loc = (modal_x + (modal_width - subtext_object.get_width()) // 2,
                       modal_y + 100)
@@ -321,7 +325,7 @@ class UI:
                 pygame.draw.rect(win, "black", button_rect, 2)
 
                 # Draw button text
-                button_font = pygame.font.SysFont("Helvetica", 18, True, False)
+                button_font = BUTTON_FONT
                 text = button_font.render(button_text, True, pygame.Color("black"))
                 text_rect = text.get_rect(center=button_rect.center)
                 win.blit(text, text_rect)
@@ -579,11 +583,7 @@ class Game:
                     modal_x = (BOARD_WIDTH - 400) // 2
                     ui.modal_buttons = ui.create_modal_buttons(modal_x, (BOARD_HEIGHT - 250) // 2, 400)
 
-            ui.draw_game_state(win, gamestate, valid_moves, square_selected, MOVE_LOG_FONT, EVAL_FONT)
-            
-            # Draw modal with buttons if active
-            if ui.modal_active:
-                ui.draw_modal(win, ui.modal_text, ui.modal_subtext, ui.modal_buttons)
+            ui.draw_game_state(win, gamestate, valid_moves, square_selected, MOVE_LOG_FONT, EVAL_FONT)  # includes the modal
 
             win.blit(IMGS["resign.png"], (620, 300))
             win.blit(IMGS["flip_board.png"], (620, 200))
