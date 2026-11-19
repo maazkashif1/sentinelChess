@@ -11,7 +11,7 @@ DIAGONAL_SLIDERS = "BQWG"
 KNIGHT_TYPES = "NH"
 NOTATION = {"G": "SQ", "T": "SR", "W": "SB", "H": "SN"}
 
-# material values shared by the eval bar and the AI
+# material values used by the AI's evaluation (and so the eval bar)
 PIECE_VALUES = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 4,
                 "G": 10, "T": 6, "W": 4, "H": 4}
 
@@ -250,29 +250,6 @@ class GameState:
 
             board.append(brow)
         return board
-
-    @staticmethod
-    def coordinate_to_square(coord):
-        file_mapping = {0: 'a', 1: 'b', 2: 'c', 3: 'd', 4: 'e', 5: 'f', 6: 'g', 7: 'h'}
-        rank = 8 - coord[0]
-        file = file_mapping[coord[1]]
-        return file + str(rank)
-
-    def evaluate(self, board):
-        piece_values = PIECE_VALUES
-
-        score = 0
-
-        for row in board:
-            for square in row:
-                piece_type = square[1]
-                if piece_type in piece_values:
-                    if square[0] == "w":
-                        score += piece_values[piece_type]
-                    else:
-                        score -= piece_values[piece_type]
-
-        return score
 
     def updateCastleRights(self, move):
         if move.piece_captured == "wR":

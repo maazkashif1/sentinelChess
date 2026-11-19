@@ -68,15 +68,6 @@ king_scores = [[-30, -40, -40, -50, -50, -40, -40, -30],
                [20, 20, 0, 0, 0, 0, 20, 20],
                [20, 30, 10, 0, 0, 10, 30, 20]]
 
-king_piece_square_table_end_game = [[-50, -40, -30, -20, -20, -30, -40, -50],
-                                    [-30, -20, -10, 0, 0, -10, -20, -30],
-                                    [-30, -10, 20, 30, 30, 20, -10, -30],
-                                    [-30, -10, 30, 40, 40, 30, -10, -30],
-                                    [-30, -10, 30, 40, 40, 30, -10, -30],
-                                    [-30, -10, 20, 30, 30, 20, -10, -30],
-                                    [-30, -30, 0, 0, 0, 0, -30, -30],
-                                    [-50, -30, -30, -30, -30, -30, -30, -50]]
-
 piece_position_scores = {"wN": knight_scores,
                          "bN": knight_scores[::-1],
                          "wB": bishop_scores,
@@ -139,9 +130,9 @@ def mate_in(score):
     return moves if score > 0 else -moves
 
 
-def find_best_move(gamestate, valid_moves, zobrist_keys, transposition_table, print_usage):
-    global next_move, transposition_table_hits
-    transposition_table_hits = 0
+def find_best_move(gamestate, valid_moves, zobrist_keys, transposition_table):
+    """Return the engine's move for the side to move (ai.version picks the engine)."""
+    global next_move
     next_move = None
 
     if cfg["ai"]["version"] == "v4":
@@ -149,16 +140,9 @@ def find_best_move(gamestate, valid_moves, zobrist_keys, transposition_table, pr
         # moves that order the next, deeper pass (https://www.chessprogramming.org/Iterative_Deepening)
         turn_multiplier = 1 if gamestate.white_to_move else -1
         for depth in range(1, DEPTH + 1):
-            score = find_move_v4(gamestate, valid_moves, depth, -CHECKMATE, CHECKMATE, turn_multiplier, zobrist_keys, transposition_table)
-        if print_usage:
-            print(f"Used the transposition table for this move {transposition_table_hits} time(s).")
-            print(f"The transposition table now contains {len(transposition_table)} different board states.")
-            print(f"The score of the move {next_move} was {score}")
+            find_move_v4(gamestate, valid_moves, depth, -CHECKMATE, CHECKMATE, turn_multiplier, zobrist_keys, transposition_table)
     elif cfg["ai"]["version"] == "v3":
         find_move_v3(gamestate, valid_moves, DEPTH, -CHECKMATE, CHECKMATE, 1 if gamestate.white_to_move else -1)
-    elif cfg["ai"]["version"] == "v2":
-        # greedy alg.
-        pass
     elif cfg["ai"]["version"] == "v1":
         next_move = find_random_move(valid_moves)
 
@@ -172,7 +156,7 @@ TT_MAX_ENTRIES = 1_000_000
 
 def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zobrist_keys, transposition_table, ply=0):
     """Negamax with alpha-beta pruning (https://www.chessprogramming.org/Alpha-Beta)."""
-    global next_move, transposition_table_hits
+    global next_move
 
     if not valid_moves:
         # checkmate or stalemate; prefer the quickest mate (https://www.chessprogramming.org/Mate_Scores)
@@ -191,7 +175,6 @@ def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zo
         _, entry_score, flag, _ = entry
         if (flag == EXACT or (flag == LOWER_BOUND and entry_score >= beta)
                 or (flag == UPPER_BOUND and entry_score <= alpha)):
-            transposition_table_hits += 1
             return entry_score
 
     original_alpha = alpha
@@ -378,11 +361,3 @@ def get_position_zobrist(gamestate, zobrist_keys):
 
 def find_random_move(valid_moves):
     return random.choice(valid_moves)
-
-# stages:
-# random
-# greedy
-# min max
-# alpha beta pruning
-# transposition tables
-# improvement of board scoring

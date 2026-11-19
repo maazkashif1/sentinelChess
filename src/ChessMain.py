@@ -459,7 +459,7 @@ class Game:
             if match.game_over:
                 return
             match.hint = ChessAI.find_best_move(match.gamestate, match.valid_moves, zobrist_keys,
-                                                transposition_table, False)
+                                                transposition_table)
             match.gamestate.getValidMoves()  # restore the game-over flags the search overwrote
 
         def toggle_eval():
@@ -504,7 +504,7 @@ class Game:
                 draw(f"{side} is thinking…")
                 start_time = datetime.datetime.now()
                 ai_move = ChessAI.find_best_move(match.gamestate, match.valid_moves, zobrist_keys,
-                                                 transposition_table, False)
+                                                 transposition_table)
                 if ai_move is None:
                     ai_move = ChessAI.find_random_move(match.valid_moves)
                 print(f"{side} played {ai_move} after {datetime.datetime.now() - start_time}")
