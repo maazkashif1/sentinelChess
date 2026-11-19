@@ -1,3 +1,9 @@
+KNIGHT_OFFSETS = ((-2, -1), (-2, 1), (-1, 2), (1, 2), (2, -1), (2, 1), (-1, -2), (1, -2))
+KING_OFFSETS = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+ROOK_DIRECTIONS = ((-1, 0), (0, -1), (1, 0), (0, 1))
+BISHOP_DIRECTIONS = ((-1, -1), (-1, 1), (1, 1), (1, -1))
+
+
 class GameState:
     def __init__(self, fen=None):
         if fen is None:
@@ -250,7 +256,7 @@ class GameState:
                     moves.remove(move)
 
         if len(moves) == 0:
-            if self.inCheck():
+            if self.in_check:
                 self.checkmate = True
             else:
                 self.stalemate = True
@@ -266,9 +272,45 @@ class GameState:
 
     def inCheck(self):
         if self.white_to_move:
-            return self.squareUnderAttack(self.white_king_location[0], self.white_king_location[1])
-        else:
-            return self.squareUnderAttack(self.black_king_location[0], self.black_king_location[1])
+            row, col = self.white_king_location
+            return self.isAttackedBy(row, col, "b")
+        row, col = self.black_king_location
+        return self.isAttackedBy(row, col, "w")
+
+    def isAttackedBy(self, row, col, color):
+        """Return True if a piece of `color` attacks the occupied square (row, col).
+
+        Scans outwards from the target square instead of generating every
+        opponent move (https://www.chessprogramming.org/Square_Attacked_By).
+        """
+        board = self.board
+        pawn_row = row + 1 if color == "w" else row - 1
+        if 0 <= pawn_row <= 7:
+            for c in (col - 1, col + 1):
+                if 0 <= c <= 7 and board[pawn_row][c] == color + "p":
+                    return True
+        for dr, dc in KNIGHT_OFFSETS:
+            r, c = row + dr, col + dc
+            if 0 <= r <= 7 and 0 <= c <= 7 and board[r][c] == color + "N":
+                return True
+        for dr, dc in KING_OFFSETS:  # kings and sentinels attack adjacent squares
+            r, c = row + dr, col + dc
+            if 0 <= r <= 7 and 0 <= c <= 7:
+                piece = board[r][c]
+                if piece[0] == color and piece[1] in "KS":
+                    return True
+        for directions, sliders in ((ROOK_DIRECTIONS, "RQ"), (BISHOP_DIRECTIONS, "BQ")):
+            for dr, dc in directions:
+                r, c = row + dr, col + dc
+                while 0 <= r <= 7 and 0 <= c <= 7:
+                    piece = board[r][c]
+                    if piece != "--":
+                        if piece[0] == color and piece[1] in sliders:
+                            return True
+                        break
+                    r += dr
+                    c += dc
+        return False
 
     def squareUnderAttack(self, row, col):
         self.white_to_move = not self.white_to_move  # switch to opponent's point of view
@@ -662,8 +704,7 @@ class GameState:
                         self.black_king_location = (row, col)
 
     def getCastleMoves(self, row, col, moves):
-        if self.squareUnderAttack(row, col):
-            return  
+        # only called when the king is not in check
         if (self.white_to_move and self.current_castling_rights.wks) or (
                 not self.white_to_move and self.current_castling_rights.bks):
             self.getKingsideCastleMoves(row, col, moves)
