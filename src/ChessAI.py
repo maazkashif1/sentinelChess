@@ -155,7 +155,7 @@ def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zo
     max_score = -CHECKMATE
     best_move = None
 
-    for move in valid_moves:
+    for move in order_moves(valid_moves, entry[3] if entry is not None else None):
         gamestate.makeMove(move)
         next_moves = gamestate.getValidMoves()
         score = -find_move_v4(gamestate, next_moves, depth - 1, -beta, -alpha, -turn_multiplier, zobrist_keys, transposition_table)
@@ -183,6 +183,22 @@ def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zo
     transposition_table[zobrist_key] = (depth, max_score, flag, best_move.moveID if best_move else None)
 
     return max_score
+
+
+def order_moves(moves, hash_move_id=None):
+    """Search the most promising moves first so alpha-beta prunes more
+    (https://www.chessprogramming.org/Move_Ordering): the stored hash move,
+    then captures by MVV-LVA, then promotions, then quiet moves."""
+    def priority(move):
+        if move.moveID == hash_move_id:
+            return 10_000
+        score = 0
+        if move.piece_captured != "--":
+            score += 1_000 + 10 * piece_value[move.piece_captured[1]] - piece_value[move.piece_moved[1]]
+        if move.is_pawn_promotion:
+            score += 900
+        return score
+    return sorted(moves, key=priority, reverse=True)
 
 
 def find_move_v3(gamestate, valid_moves, depth, alpha, beta, turn_multiplier):
