@@ -75,7 +75,7 @@ class Button:
     def draw(self):
         text = UI_FONT.render(self.text, True, "white")
         button_rect = pygame.rect.Rect((self.x_pos, self.y_pos), (self.width, self.height))
-        win = pygame.display.set_mode((BOARD_WIDTH + MOVE_LOG_WIDTH, BOARD_HEIGHT))
+        win = pygame.display.get_surface()
         pygame.draw.rect(win, "black", button_rect, 0, 5)
 
         win.blit(text, (self.x_pos, self.y_pos))
@@ -346,6 +346,8 @@ class Game:
     def home(self):
         ui = UI()
         gamestate = ChessEngine.GameState()
+        win = pygame.display.set_mode((BOARD_WIDTH + MOVE_LOG_WIDTH, BOARD_HEIGHT))
+        clock = pygame.time.Clock()
 
         settings_button = Button("settings", 728, 4, 30, 30, True)
         start_button = Button("start", 552, 59, 200, 50, True)
@@ -356,7 +358,6 @@ class Game:
         ui.load_pieces()
         ui.load_images()
 
-        win = pygame.display.set_mode((BOARD_WIDTH + MOVE_LOG_WIDTH, BOARD_HEIGHT))
         win.fill(pygame.Color("white"))
 
         run, active = True, False
@@ -396,6 +397,7 @@ class Game:
             win.blit(fen_input, (fen_rect.x + 10, fen_rect.y + (10 if len(fen) <= 25 else 20)))
 
             pygame.display.update()
+            clock.tick(MAX_FPS)
 
 
     def settings(self):
@@ -627,8 +629,8 @@ if __name__ == "__main__":
     while True:
         result = game.home()
         if result == "start":
-            result = game.main()
-            if result == "quit":
+            if game.main() == "quit":
                 break
-        else:
-            print("Not start")
+        elif result != "settings":  # window closed on the home screen
+            break
+    pygame.quit()
