@@ -46,4 +46,4 @@ Click a piece, then a highlighted square. The sidebar buttons have keyboard shor
 - [Mate scores](https://www.chessprogramming.org/Mate_Scores) adjusted by distance, so faster mates are preferred
 - [Piece-square tables](https://www.chessprogramming.org/Simplified_Evaluation_Function) for evaluation
 
-Move generation is checked with [perft](https://www.chessprogramming.org/Perft) counts and seeded random-game snapshots (`tests/movegen_harness.py`). Regenerate the snapshot only after an intentional rules change.
+Move generation is checked with [perft](https://www.chessprogramming.org/Perft) counts and seeded random-game snapshots (`tests/movegen_harness.py`), and a random-play test makes sure no legal move ever leaves the king in check. Regenerate the snapshot only after an intentional rules change.
