@@ -176,10 +176,23 @@ def test_sentinel_pieces_move_like_their_base_piece():
             destinations(f"7k/8/8/3{base}4/8/8/8/K7 w - - 0 1", "w" + base), sentinel
 
 
-def test_sentinel_pieces_shield_neighbours_and_resist_pawns():
-    # black sentinel knight on b6 shields the a5 knight from the a1 rook
-    gs = ChessEngine.GameState(fen="4k3/8/1h6/n7/8/8/8/R3K3 w - - 0 1")
-    assert not any((m.end_row, m.end_col) == (3, 0) for m in gs.getValidMoves())
+def can_capture_a5(fen):
+    gs = ChessEngine.GameState(fen=fen)
+    return any((m.end_row, m.end_col) == (3, 0) for m in gs.getValidMoves())
+
+
+def test_promoted_sentinels_protect_the_squares_they_cover():
+    # the white rook on a1 attacks the black knight on a5; is the knight protected?
+    assert not can_capture_a5("4k3/8/8/n7/8/1h6/8/R3K3 w - - 0 1")   # sentinel knight b3 jumps to a5
+    assert can_capture_a5("4k3/8/1h6/n7/8/8/8/R3K3 w - - 0 1")       # b6 is not a knight jump from a5
+    assert not can_capture_a5("4k3/8/8/n6t/8/8/8/R3K3 w - - 0 1")    # sentinel rook h5 sees a5 along the rank
+    assert can_capture_a5("4k3/8/8/n2P3t/8/8/8/R3K3 w - - 0 1")      # ...unless something blocks the line
+    assert not can_capture_a5("4k3/8/8/n7/8/8/3w4/R3K3 w - - 0 1")   # sentinel bishop d2 on the diagonal
+    assert not can_capture_a5("3gk3/8/8/n7/8/8/8/R3K3 w - - 0 1")    # sentinel queen d8 on the diagonal
+    assert can_capture_a5("4k3/8/1t6/n7/8/8/8/R3K3 w - - 0 1")       # a rook does not cover the diagonal b6-a5
+
+
+def test_sentinel_pieces_resist_pawns():
     # a pawn can never capture a sentinel rook, even an unshielded one
     gs = ChessEngine.GameState(fen="4k3/8/8/3t4/4P3/8/8/4K3 w - - 0 1")
     assert not any(m.piece_moved == "wp" and m.is_capture for m in gs.getValidMoves())

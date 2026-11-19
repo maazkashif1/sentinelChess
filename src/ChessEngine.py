@@ -2,7 +2,8 @@
 #   S  sentinel (pawn-like)   G  sentinel queen   T  sentinel rook
 #   W  sentinel bishop        H  sentinel knight
 # A sentinel reaching the last rank must promote to G, T, W or H. Every member
-# of the family shields adjacent allies from capture and is immune to pawns.
+# of the family protects the allies on the squares it covers (where it could
+# move) from capture, and is immune to pawns.
 SENTINEL_FAMILY = "SGTWH"
 SENTINEL_PROMOTIONS = {"Q": "G", "R": "T", "B": "W", "N": "H"}
 ORTHOGONAL_SLIDERS = "RQTG"
@@ -393,14 +394,33 @@ class GameState:
         return self.isAttackedBy(row, col, "b" if self.white_to_move else "w")
 
     def isDefendedBySentinel(self, row, col):
-        """True if the piece on (row, col) stands next to a friendly sentinel-family piece."""
-        color = self.board[row][col][0]
+        """True if a friendly sentinel-family piece covers (row, col), i.e. could move there.
+
+        A sentinel covers the 8 squares around it; a sentinel knight covers its
+        knight jumps; sentinel rooks, bishops and queens cover their lines up to
+        and including the first piece in the way, as on the current board.
+        """
+        board = self.board
+        color = board[row][col][0]
         for dr, dc in KING_OFFSETS:
             r, c = row + dr, col + dc
-            if 0 <= r <= 7 and 0 <= c <= 7:
-                piece = self.board[r][c]
-                if piece[0] == color and piece[1] in SENTINEL_FAMILY:
-                    return True
+            if 0 <= r <= 7 and 0 <= c <= 7 and board[r][c] == color + "S":
+                return True
+        for dr, dc in KNIGHT_OFFSETS:
+            r, c = row + dr, col + dc
+            if 0 <= r <= 7 and 0 <= c <= 7 and board[r][c] == color + "H":
+                return True
+        for directions, guards in ((ROOK_DIRECTIONS, "TG"), (BISHOP_DIRECTIONS, "WG")):
+            for dr, dc in directions:
+                r, c = row + dr, col + dc
+                while 0 <= r <= 7 and 0 <= c <= 7:
+                    piece = board[r][c]
+                    if piece != "--":
+                        if piece[0] == color and piece[1] in guards:
+                            return True
+                        break
+                    r += dr
+                    c += dc
         return False
 
     def getAllPossibleMoves(self):

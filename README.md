@@ -3,9 +3,9 @@
 A chess variant built with pygame. Each side gets two **Sentinels** (`S`) in place of the d- and e-pawns:
 
 - A Sentinel steps one square in any direction, or two squares forward from its starting rank. It can also capture en passant, and its own double step can be taken en passant, but only by an enemy Sentinel.
-- A piece standing next to a friendly Sentinel can't be captured by anything, including en passant. Pawns can't capture Sentinels at all.
+- A Sentinel protects the 8 squares around it, the squares it can move to: a friendly piece there can't be captured by anything, including en passant. Pawns can't capture Sentinels at all.
 - A Sentinel next to the enemy king gives check.
-- A Sentinel reaching the last rank must promote to a **Sentinel queen, rook, bishop or knight**. These move like the normal piece, keep the Sentinel's shield over adjacent allies, and pawns can't capture them. In the move log they appear as SQ, SR, SB and SN (e.g. `Sd8=SR`). In FEN they are `G`, `T`, `W` and `H` (lowercase for black).
+- A Sentinel reaching the last rank must promote to a **Sentinel queen, rook, bishop or knight**. These move like the normal piece and protect every ally on a square they could move to: a Sentinel knight its knight jumps, a Sentinel rook, bishop or queen its lines up to the first piece in the way. Pawns can't capture them. In the move log they appear as SQ, SR, SB and SN (e.g. `Sd8=SR`). In FEN they are `G`, `T`, `W` and `H` (lowercase for black).
 
 Every Sentinel-family piece carries a blue shield emblem. To regenerate the images: `uv run --group art python tools/make_sentinel_pieces.py`.
 
