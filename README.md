@@ -2,7 +2,7 @@
 
 A chess variant built with pygame. Each side gets two **Sentinels** (`S`) in place of the d- and e-pawns:
 
-- A Sentinel steps one square in any direction, or two squares forward from its starting rank. It can also capture en passant.
+- A Sentinel steps one square in any direction, or two squares forward from its starting rank. It can also capture en passant, and its own double step can be taken en passant, but only by an enemy Sentinel.
 - A piece standing next to a friendly Sentinel can't be captured by anything, including en passant. Pawns can't capture Sentinels at all.
 - A Sentinel next to the enemy king gives check.
 
