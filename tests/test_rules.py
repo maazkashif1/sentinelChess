@@ -105,3 +105,18 @@ def test_pawn_or_sentinel_move_resets_fifty_move_count():
     gs = ChessEngine.GameState(fen="4k3/8/8/8/8/8/3S4/4K3 w - - 99 80")
     play(gs, (6, 3, 5, 3))
     assert gs.halfmove_clock == 0 and not gs.move_draw
+
+
+def test_insufficient_material():
+    def drawn(fen):
+        gs = ChessEngine.GameState(fen=fen)
+        gs.getValidMoves()
+        return gs.ins_draw
+
+    assert drawn("4k3/8/8/8/8/8/8/4K3 w - - 0 1")          # K v K
+    assert drawn("4k3/8/8/8/8/8/8/2B1K3 w - - 0 1")        # K+B v K
+    assert drawn("4k3/8/8/8/8/8/8/1N2K3 w - - 0 1")        # K+N v K
+    assert drawn("2b1k3/8/8/8/8/8/8/2B1K3 w - - 0 1") is False  # bishops on opposite colours
+    assert drawn("4kb2/8/8/8/8/8/8/2B1K3 w - - 0 1")       # bishops on the same colour
+    assert not drawn("4k3/8/8/8/8/8/8/1NN1K3 w - - 0 1")   # two knights: mate is possible
+    assert not drawn("4k3/8/8/8/8/8/3S4/4K3 w - - 0 1")    # a sentinel can still mate

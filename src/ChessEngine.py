@@ -33,6 +33,7 @@ class GameState:
         self.stalemate = False
         self.rep_stalemate = False
         self.move_draw = False  # 50-move rule
+        self.ins_draw = False  # insufficient material
         self.halfmove_clock = 0  # plies since the last capture or pawn/sentinel move
         self.halfmove_log = []
         self.in_check = False
@@ -309,9 +310,25 @@ class GameState:
         self.rep_stalemate = self.position_counts[self.position_log[-1]] >= 3
         # 50-move rule: 100 plies without a capture or a pawn/sentinel move
         self.move_draw = self.halfmove_clock >= 100
+        self.ins_draw = self.insufficientMaterial()
 
         self.current_castling_rights = temp_castle_rights
         return moves
+
+    def insufficientMaterial(self):
+        """True when neither side can ever checkmate: K v K, K + minor piece v K,
+        or kings with bishops that all stand on squares of one colour."""
+        minors = []
+        for row in range(8):
+            for col in range(8):
+                piece_type = self.board[row][col][1]
+                if piece_type in "pSRQ":
+                    return False
+                if piece_type in "BN":
+                    minors.append((piece_type, (row + col) % 2))
+        if len(minors) <= 1:
+            return True
+        return all(t == "B" for t, _ in minors) and len({shade for _, shade in minors}) == 1
 
     def inCheck(self):
         if self.white_to_move:

@@ -597,6 +597,13 @@ class Game:
                     ui.modal_subtext = "50 moves without a capture or pawn move"
                     modal_x = (BOARD_WIDTH - 400) // 2
                     ui.modal_buttons = ui.create_modal_buttons(modal_x, (BOARD_HEIGHT - 250) // 2, 400)
+                elif gamestate.ins_draw:
+                    game_over = True
+                    ui.modal_active = True
+                    ui.modal_text = "Draw!"
+                    ui.modal_subtext = "Insufficient material to checkmate"
+                    modal_x = (BOARD_WIDTH - 400) // 2
+                    ui.modal_buttons = ui.create_modal_buttons(modal_x, (BOARD_HEIGHT - 250) // 2, 400)
 
             ui.draw_game_state(win, gamestate, valid_moves, square_selected, MOVE_LOG_FONT, EVAL_FONT)  # includes the modal
 
