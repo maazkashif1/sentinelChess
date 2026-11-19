@@ -124,47 +124,63 @@ def find_best_move(gamestate, valid_moves, zobrist_keys, transposition_table, pr
     return next_move
 
 
+# transposition table entry flags (https://www.chessprogramming.org/Transposition_Table)
+EXACT, LOWER_BOUND, UPPER_BOUND = 0, 1, 2
+TT_MAX_ENTRIES = 1_000_000
+
+
 def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zobrist_keys, transposition_table):
+    """Negamax with alpha-beta pruning (https://www.chessprogramming.org/Alpha-Beta)."""
     global next_move, transposition_table_hits
-
-    zobrist_key = get_position_zobrist(gamestate.board, zobrist_keys)
-    transposition_table_entry = check_zobrist_position(zobrist_key, transposition_table)
-
-    if transposition_table_entry is not None and transposition_table_entry["depth"] >= depth:
-        transposition_table_hits += 1  # Increment the counter
-        return transposition_table_entry["score"]
+    ply = DEPTH - depth
 
     if not valid_moves:
         # checkmate or stalemate; prefer the quickest mate (https://www.chessprogramming.org/Mate_Scores)
-        ply = DEPTH - depth
         return -(CHECKMATE - ply) if gamestate.checkmate else turn_multiplier * STALEMATE
 
     if depth == 0:
         return turn_multiplier * score_board_v4(gamestate)
 
+    zobrist_key = get_position_zobrist(gamestate, zobrist_keys)
+    entry = transposition_table.get(zobrist_key)
+    # never cut off at the root: we still need a move to play
+    if entry is not None and ply > 0 and entry[0] >= depth:
+        _, entry_score, flag, _ = entry
+        if (flag == EXACT or (flag == LOWER_BOUND and entry_score >= beta)
+                or (flag == UPPER_BOUND and entry_score <= alpha)):
+            transposition_table_hits += 1
+            return entry_score
+
+    original_alpha = alpha
     max_score = -CHECKMATE
+    best_move = None
 
     for move in valid_moves:
-
         gamestate.makeMove(move)
-
-        # what to do if he didnt
         next_moves = gamestate.getValidMoves()
         score = -find_move_v4(gamestate, next_moves, depth - 1, -beta, -alpha, -turn_multiplier, zobrist_keys, transposition_table)
+        gamestate.undoMove()
 
         if score > max_score:
             max_score = score
-            if depth == DEPTH:
+            best_move = move
+            if ply == 0:
                 next_move = move
-
-        gamestate.undoMove()
 
         if max_score > alpha:
             alpha = max_score
         if alpha >= beta:
             break
 
-    add_zobrist_position(zobrist_key, transposition_table, max_score, alpha, beta, depth)
+    if max_score <= original_alpha:
+        flag = UPPER_BOUND
+    elif max_score >= beta:
+        flag = LOWER_BOUND
+    else:
+        flag = EXACT
+    if len(transposition_table) >= TT_MAX_ENTRIES:
+        transposition_table.clear()
+    transposition_table[zobrist_key] = (depth, max_score, flag, best_move.moveID if best_move else None)
 
     return max_score
 
@@ -266,39 +282,39 @@ def score_board_v3(gamestate):
 
 
 def generate_zobrist_keys():
+    """Random keys for Zobrist hashing (https://www.chessprogramming.org/Zobrist_Hashing)."""
     zobrist_keys = {}
 
     for row in range(8):
         for col in range(8):
-            piece_zobrist_keys = {piece: random.getrandbits(64) for piece in pieces}
-            zobrist_keys[(row, col)] = piece_zobrist_keys
+            zobrist_keys[(row, col)] = {piece: random.getrandbits(64) for piece in pieces}
+    zobrist_keys["black_to_move"] = random.getrandbits(64)
+    zobrist_keys["castling"] = [random.getrandbits(64) for _ in range(4)]
+    zobrist_keys["enpassant_file"] = [random.getrandbits(64) for _ in range(8)]
 
     return zobrist_keys
 
 
-def get_position_zobrist(board, zobrist_keys):
+def get_position_zobrist(gamestate, zobrist_keys):
+    """Hash the board plus side to move, castling rights and en passant file."""
     key = 0
-
+    board = gamestate.board
     for row in range(8):
         for col in range(8):
             piece = board[row][col]
             if piece != "--":
                 key ^= zobrist_keys[(row, col)][piece]
 
+    if not gamestate.white_to_move:
+        key ^= zobrist_keys["black_to_move"]
+    rights = gamestate.current_castling_rights
+    for i, right in enumerate((rights.wks, rights.wqs, rights.bks, rights.bqs)):
+        if right:
+            key ^= zobrist_keys["castling"][i]
+    if gamestate.enpassant_possible:
+        key ^= zobrist_keys["enpassant_file"][gamestate.enpassant_possible[1]]
+
     return key
-
-
-def check_zobrist_position(zobrist_key, transposition_table):
-    try:
-        transposition_table_entry = transposition_table[zobrist_key]
-        return transposition_table_entry
-
-    except KeyError:
-        return None
-
-
-def add_zobrist_position(zobrist_key, transposition_table, score, alpha, beta, depth):
-    transposition_table[zobrist_key] = {"depth": depth, "score": score, "alpha": alpha, "beta": beta}
 
 
 def find_random_move(valid_moves):
