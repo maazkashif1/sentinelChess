@@ -35,8 +35,36 @@ class GameState:
         self.enpassant_possible = ()  # coordinates for the square where en-passant capture is possible
         self.enpassant_possible_log = [self.enpassant_possible]
         self.current_castling_rights = CastleRights(True, True, True, True)
+        if fen is not None:
+            self.load_fen_state(fen)
         self.castle_rights_log = [CastleRights(self.current_castling_rights.wks, self.current_castling_rights.bks,
                                                self.current_castling_rights.wqs, self.current_castling_rights.bqs)]
+
+    def load_fen_state(self, fen):
+        """Apply side to move, castling rights, en passant square and king squares from a FEN string."""
+        fields = fen.split()
+        side = fields[1] if len(fields) > 1 else "w"
+        castling = fields[2] if len(fields) > 2 else "-"
+        enpassant = fields[3] if len(fields) > 3 else "-"
+
+        self.white_to_move = side != "b"
+        for row in range(8):
+            for col in range(8):
+                if self.board[row][col] == "wK":
+                    self.white_king_location = (row, col)
+                elif self.board[row][col] == "bK":
+                    self.black_king_location = (row, col)
+
+        # only keep a castling right if the king and rook are still on their home squares
+        def can_castle(flag, row, rook_col, color):
+            return (flag in castling and self.board[row][4] == color + "K"
+                    and self.board[row][rook_col] == color + "R")
+        self.current_castling_rights = CastleRights(can_castle("K", 7, 7, "w"), can_castle("k", 0, 7, "b"),
+                                                    can_castle("Q", 7, 0, "w"), can_castle("q", 0, 0, "b"))
+
+        if enpassant != "-" and len(enpassant) == 2:
+            self.enpassant_possible = (8 - int(enpassant[1]), "abcdefgh".index(enpassant[0]))
+        self.enpassant_possible_log = [self.enpassant_possible]
 
     def makeMove(self, move):
         self.board[move.start_row][move.start_col] = "--"

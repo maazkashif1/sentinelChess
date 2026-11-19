@@ -19,3 +19,12 @@ def test_sentinel_shields_adjacent_ally_from_capture():
     # white rook on a1 cannot take the black knight on a5: the sentinel on b6 guards it
     gs = ChessEngine.GameState(fen="4k3/8/1s6/n7/8/8/8/R3K3 w - - 0 1")
     assert not any(m.end_row == 3 and m.end_col == 0 for m in gs.getValidMoves())
+
+
+def test_fen_sets_side_to_move_kings_and_castling():
+    gs = ChessEngine.GameState(fen="6k1/5ppp/8/8/8/8/5PPP/R5K1 b Q - 0 1")
+    assert not gs.white_to_move
+    assert gs.white_king_location == (7, 6) and gs.black_king_location == (0, 6)
+    # Q is listed but the white king has left e1, so the right is dropped
+    assert not gs.current_castling_rights.wqs
+    assert gs.getValidMoves()
