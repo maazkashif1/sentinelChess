@@ -488,6 +488,8 @@ class GameState:
                         moves.append(Move((row, col), (row + move_amount, col + 1), self.board, is_enpassant_move=True))
 
     def getSentinelPawnMoves(self, row, col, moves):
+        """Sentinel: steps one square in any direction (like a king), may
+        double-step forward from its starting rank and can capture en passant."""
         piece_pinned = False
         pin_direction = ()
         for i in range(len(self.pins) - 1, -1, -1):
@@ -498,95 +500,54 @@ class GameState:
                 break
 
         if self.white_to_move:
-            move_amount = -1
-            start_row = 6
-            enemy_color = "b"
+            move_amount, start_row, enemy_color = -1, 6, "b"
             king_row, king_col = self.white_king_location
-            enemy_king_row, enemy_king_col = self.black_king_location
         else:
-            move_amount = 1
-            start_row = 1
-            enemy_color = "w"
+            move_amount, start_row, enemy_color = 1, 1, "w"
             king_row, king_col = self.black_king_location
-            enemy_king_row, enemy_king_col = self.white_king_location
 
-        directions = [
-            (-1, -1), (-1, 0), (-1, 1),  
-            (0, -1), (0, 1),             
-            (1, -1), (1, 0), (1, 1)      
-        ]
-
-        for d in directions:
+        board = self.board
+        for d in KING_OFFSETS:
             end_row = row + d[0]
             end_col = col + d[1]
-            
-            if 0 <= end_row < 8 and 0 <= end_col < 8:
-                if not piece_pinned or pin_direction == d:
-                    if self.board[end_row][end_col] == "--":
-                        if abs(end_row - enemy_king_row) <= 1 and abs(end_col - enemy_king_col) <= 1:
-                            move = Move((row, col), (end_row, end_col), self.board)
-                            move.is_check = True
-                            moves.append(move)
-                        else:
-                            moves.append(Move((row, col), (end_row, end_col), self.board))
-                    elif self.board[end_row][end_col][0] == enemy_color:
-                        if abs(end_row - enemy_king_row) <= 1 and abs(end_col - enemy_king_col) <= 1:
-                            move = Move((row, col), (end_row, end_col), self.board)
-                            move.is_capture = True
-                            move.is_check = True
-                            moves.append(move)
-                        else:
-                            move = Move((row, col), (end_row, end_col), self.board)
-                            move.is_capture = True
-                            moves.append(move)
+            if 0 <= end_row < 8 and 0 <= end_col < 8 and (not piece_pinned or pin_direction == d):
+                end_piece = board[end_row][end_col]
+                if end_piece == "--" or end_piece[0] == enemy_color:
+                    moves.append(Move((row, col), (end_row, end_col), board))
 
-        if row == start_row and self.board[row + 2 * move_amount][col] == "--" and self.board[row + move_amount][col] == "--":
+        if row == start_row and board[row + move_amount][col] == "--" and board[row + 2 * move_amount][col] == "--":
             if not piece_pinned or pin_direction == (move_amount, 0):
-                if abs((row + 2 * move_amount) - enemy_king_row) <= 1 and abs(col - enemy_king_col) <= 1:
-                    move = Move((row, col), (row + 2 * move_amount, col), self.board)
-                    move.is_check = True
-                    moves.append(move)
-                else:
-                    moves.append(Move((row, col), (row + 2 * move_amount, col), self.board))
+                moves.append(Move((row, col), (row + 2 * move_amount, col), board))
 
         if self.enpassant_possible:
-            for d in directions:
+            for d in KING_OFFSETS:
                 end_row = row + d[0]
                 end_col = col + d[1]
-                
-                if 0 <= end_row < 8 and 0 <= end_col < 8:
-                    if (end_row, end_col) == self.enpassant_possible:
-                        if not piece_pinned or pin_direction == d:
-                            captured_row = row
-                            captured_col = end_col
-                            if self.board[captured_row][captured_col][1] == "p":
-                                attacking_piece = blocking_piece = False
-                                if king_row == row:
-                                    if king_col < col:
-                                        inside_range = range(king_col + 1, col)
-                                        outside_range = range(col + 1, 8)
-                                    else:
-                                        inside_range = range(king_col - 1, col + 1, -1)
-                                        outside_range = range(col - 1, -1, -1)
-                                    for i in inside_range:
-                                        if self.board[row][i] != "--":
-                                            blocking_piece = True
-                                    for i in outside_range:
-                                        square = self.board[row][i]
-                                        if square[0] == enemy_color and square[1] in ("R", "Q"):
-                                            attacking_piece = True
-                                        elif square != "--":
-                                            blocking_piece = True
-                                if not attacking_piece or blocking_piece:
-                                    if abs(end_row - enemy_king_row) <= 1 and abs(end_col - enemy_king_col) <= 1:
-                                        move = Move((row, col), (end_row, end_col), self.board, is_enpassant_move=True)
-                                        move.is_capture = True
-                                        move.is_check = True
-                                        moves.append(move)
-                                    else:
-                                        move = Move((row, col), (end_row, end_col), self.board, is_enpassant_move=True)
-                                        move.is_capture = True
-                                        moves.append(move)
+                if (end_row, end_col) != self.enpassant_possible:
+                    continue
+                if piece_pinned and pin_direction != d:
+                    continue
+                if board[row][end_col][1] != "p":
+                    continue
+                attacking_piece = blocking_piece = False
+                if king_row == row:
+                    if king_col < col:
+                        inside_range = range(king_col + 1, col)
+                        outside_range = range(col + 1, 8)
+                    else:
+                        inside_range = range(king_col - 1, col + 1, -1)
+                        outside_range = range(col - 1, -1, -1)
+                    for i in inside_range:
+                        if board[row][i] != "--":
+                            blocking_piece = True
+                    for i in outside_range:
+                        square = board[row][i]
+                        if square[0] == enemy_color and square[1] in ("R", "Q"):
+                            attacking_piece = True
+                        elif square != "--":
+                            blocking_piece = True
+                if not attacking_piece or blocking_piece:
+                    moves.append(Move((row, col), (end_row, end_col), board, is_enpassant_move=True))
 
     def getRookMoves(self, row, col, moves):
         piece_pinned = False
