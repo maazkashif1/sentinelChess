@@ -142,6 +142,9 @@ def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zo
         # checkmate or stalemate; prefer the quickest mate (https://www.chessprogramming.org/Mate_Scores)
         return -(CHECKMATE - ply) if gamestate.checkmate else turn_multiplier * STALEMATE
 
+    if ply > 0 and (gamestate.rep_stalemate or gamestate.move_draw or gamestate.ins_draw):
+        return turn_multiplier * STALEMATE  # drawn by repetition, 50-move rule or material
+
     if depth == 0:
         return turn_multiplier * score_board_v4(gamestate)
 

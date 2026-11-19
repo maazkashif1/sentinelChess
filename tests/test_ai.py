@@ -23,3 +23,12 @@ def test_returns_a_move_when_root_is_already_in_the_table():
     first = ChessAI.find_best_move(gs, moves, keys, table, False)
     second = ChessAI.find_best_move(gs, moves, keys, table, False)
     assert first in moves and second in moves
+
+
+def test_search_scores_drawn_positions_as_draws():
+    # white is a bishop up, but K+B v K can never be won
+    gs = ChessEngine.GameState(fen="4k3/8/8/8/8/8/8/2B1K3 b - - 0 1")
+    moves = gs.getValidMoves()
+    score = ChessAI.find_move_v4(gs, moves, 2, -ChessAI.CHECKMATE, ChessAI.CHECKMATE, -1,
+                                 ChessAI.generate_zobrist_keys(), {}, ply=1)
+    assert score == ChessAI.STALEMATE
