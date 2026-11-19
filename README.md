@@ -3,8 +3,10 @@
 A chess variant built with pygame. Each side gets two **Sentinels** (`S`) in place of the d- and e-pawns:
 
 - A Sentinel steps one square in any direction, or two squares forward from its starting rank. It can also capture en passant.
-- A piece standing next to a friendly Sentinel can't be captured. Pawns can't capture Sentinels at all.
+- A piece standing next to a friendly Sentinel can't be captured by anything, including en passant. Pawns can't capture Sentinels at all.
 - A Sentinel next to the enemy king gives check.
+
+Everything else follows standard chess: castling, en passant, promotion to any piece, and draws by stalemate, threefold repetition, the 50-move rule (Sentinel moves reset the count, like pawn moves) and insufficient material.
 
 ## Setup
 
