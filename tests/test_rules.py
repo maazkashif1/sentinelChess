@@ -154,3 +154,40 @@ def test_pinned_queen_stays_on_the_pin_line():
 
     assert queen_moves("4k3/8/8/b7/8/8/3Q4/4K3 w - - 0 1") == ["Qb4", "Qc3", "Qxa5"]
     assert queen_moves("k3r3/8/8/8/8/8/4Q3/4K3 w - - 0 1") == ["Qe3", "Qe4", "Qe5", "Qe6", "Qe7", "Qxe8"]
+
+
+def test_sentinel_must_promote_to_a_sentinel_piece():
+    gs = ChessEngine.GameState(fen="6k1/3S4/8/8/8/8/8/4K3 w - - 0 1")
+    to_last_rank = [m for m in gs.getValidMoves() if m.piece_moved == "wS" and m.end_row == 0]
+    assert to_last_rank and all(m.is_pawn_promotion for m in to_last_rank)
+    assert sorted({m.promotion_code for m in to_last_rank}) == ["wG", "wH", "wT", "wW"]
+    rook = next(m for m in to_last_rank if m.end_col == 3 and m.promotion_piece == "R")
+    gs.makeMove(rook)
+    assert gs.board[0][3] == "wT" and str(rook) == "Sd8=SR"
+
+
+def test_sentinel_pieces_move_like_their_base_piece():
+    def destinations(fen, code):
+        gs = ChessEngine.GameState(fen=fen)
+        return sorted((m.end_row, m.end_col) for m in gs.getValidMoves() if m.piece_moved == code)
+
+    for sentinel, base in (("G", "Q"), ("T", "R"), ("W", "B"), ("H", "N")):
+        assert destinations(f"7k/8/8/3{sentinel}4/8/8/8/K7 w - - 0 1", "w" + sentinel) == \
+            destinations(f"7k/8/8/3{base}4/8/8/8/K7 w - - 0 1", "w" + base), sentinel
+
+
+def test_sentinel_pieces_shield_neighbours_and_resist_pawns():
+    # black sentinel knight on b6 shields the a5 knight from the a1 rook
+    gs = ChessEngine.GameState(fen="4k3/8/1h6/n7/8/8/8/R3K3 w - - 0 1")
+    assert not any((m.end_row, m.end_col) == (3, 0) for m in gs.getValidMoves())
+    # a pawn can never capture a sentinel rook, even an unshielded one
+    gs = ChessEngine.GameState(fen="4k3/8/8/3t4/4P3/8/8/4K3 w - - 0 1")
+    assert not any(m.piece_moved == "wp" and m.is_capture for m in gs.getValidMoves())
+
+
+def test_sentinel_pieces_give_check_and_pin():
+    gs = ChessEngine.GameState(fen="4t1k1/8/8/8/8/8/8/4K3 w - - 0 1")   # sentinel rook on the e-file
+    gs.getValidMoves()
+    assert gs.in_check and gs.inCheck()
+    gs = ChessEngine.GameState(fen="6k1/8/8/w7/8/8/3N4/4K3 w - - 0 1")  # sentinel bishop pins the d2 knight
+    assert not any(m.piece_moved == "wN" for m in gs.getValidMoves())

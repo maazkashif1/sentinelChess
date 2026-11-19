@@ -1,5 +1,18 @@
+# Piece codes are a colour ("w"/"b") plus a type letter. The sentinel family:
+#   S  sentinel (pawn-like)   G  sentinel queen   T  sentinel rook
+#   W  sentinel bishop        H  sentinel knight
+# A sentinel reaching the last rank must promote to G, T, W or H. Every member
+# of the family shields adjacent allies from capture and is immune to pawns.
+SENTINEL_FAMILY = "SGTWH"
+SENTINEL_PROMOTIONS = {"Q": "G", "R": "T", "B": "W", "N": "H"}
+ORTHOGONAL_SLIDERS = "RQTG"
+DIAGONAL_SLIDERS = "BQWG"
+KNIGHT_TYPES = "NH"
+NOTATION = {"G": "SQ", "T": "SR", "W": "SB", "H": "SN"}
+
 # material values shared by the eval bar and the AI
-PIECE_VALUES = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 4}
+PIECE_VALUES = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 4,
+                "G": 10, "T": 6, "W": 4, "H": 4}
 
 PROMOTION_PIECES = "QRBN"  # queen first: it is the default promotion
 
@@ -26,7 +39,8 @@ class GameState:
 
         self.moveFunctions = {"p": self.getPawnMoves, "R": self.getRookMoves, "N": self.getKnightMoves,
                               "B": self.getBishopMoves, "Q": self.getQueenMoves, "K": self.getKingMoves,
-                              "S": self.getSentinelPawnMoves}
+                              "S": self.getSentinelPawnMoves, "G": self.getQueenMoves, "T": self.getRookMoves,
+                              "W": self.getBishopMoves, "H": self.getKnightMoves}
         self.white_to_move = True
         self.move_log = []
         self.white_king_location = (7, 4)
@@ -106,7 +120,7 @@ class GameState:
             self.black_king_location = (move.end_row, move.end_col)
 
         if move.is_pawn_promotion:
-            self.board[move.end_row][move.end_col] = move.piece_moved[0] + move.promotion_piece
+            self.board[move.end_row][move.end_col] = move.promotion_code
 
         if move.is_enpassant_move:
             self.board[move.start_row][move.end_col] = "--" 
@@ -275,7 +289,7 @@ class GameState:
                 check_col = check[1]
                 piece_checking = self.board[check_row][check_col]
                 valid_squares = []  
-                if piece_checking[1] == "N":
+                if piece_checking[1] in KNIGHT_TYPES:
                     valid_squares = [(check_row, check_col)]
                 else:
                     for i in range(1, 8):
@@ -324,10 +338,10 @@ class GameState:
         for row in range(8):
             for col in range(8):
                 piece_type = self.board[row][col][1]
-                if piece_type in "pSRQ":
+                if piece_type in "pSRQTG":
                     return False
-                if piece_type in "BN":
-                    minors.append((piece_type, (row + col) % 2))
+                if piece_type in "BNWH":
+                    minors.append(("B" if piece_type in "BW" else "N", (row + col) % 2))
         if len(minors) <= 1:
             return True
         return all(t == "B" for t, _ in minors) and len({shade for _, shade in minors}) == 1
@@ -353,7 +367,7 @@ class GameState:
                     return True
         for dr, dc in KNIGHT_OFFSETS:
             r, c = row + dr, col + dc
-            if 0 <= r <= 7 and 0 <= c <= 7 and board[r][c] == color + "N":
+            if 0 <= r <= 7 and 0 <= c <= 7 and board[r][c][0] == color and board[r][c][1] in KNIGHT_TYPES:
                 return True
         for dr, dc in KING_OFFSETS:  # kings and sentinels attack adjacent squares
             r, c = row + dr, col + dc
@@ -361,7 +375,7 @@ class GameState:
                 piece = board[r][c]
                 if piece[0] == color and piece[1] in "KS":
                     return True
-        for directions, sliders in ((ROOK_DIRECTIONS, "RQ"), (BISHOP_DIRECTIONS, "BQ")):
+        for directions, sliders in ((ROOK_DIRECTIONS, ORTHOGONAL_SLIDERS), (BISHOP_DIRECTIONS, DIAGONAL_SLIDERS)):
             for dr, dc in directions:
                 r, c = row + dr, col + dc
                 while 0 <= r <= 7 and 0 <= c <= 7:
@@ -379,11 +393,14 @@ class GameState:
         return self.isAttackedBy(row, col, "b" if self.white_to_move else "w")
 
     def isDefendedBySentinel(self, row, col):
-        sentinel = self.board[row][col][0] + "S"
+        """True if the piece on (row, col) stands next to a friendly sentinel-family piece."""
+        color = self.board[row][col][0]
         for dr, dc in KING_OFFSETS:
             r, c = row + dr, col + dc
-            if 0 <= r <= 7 and 0 <= c <= 7 and self.board[r][c] == sentinel:
-                return True
+            if 0 <= r <= 7 and 0 <= c <= 7:
+                piece = self.board[r][c]
+                if piece[0] == color and piece[1] in SENTINEL_FAMILY:
+                    return True
         return False
 
     def getAllPossibleMoves(self):
@@ -432,10 +449,11 @@ class GameState:
                         # 3.) 1 square away diagonally from king and piece is a pawn
                         # 4.) any direction and piece is a queen
                         # 5.) any direction 1 square away and piece is a king
-                        if (0 <= j <= 3 and enemy_type == "R") or (4 <= j <= 7 and enemy_type == "B") or (
+                        if (0 <= j <= 3 and enemy_type in ORTHOGONAL_SLIDERS) or (
+                                4 <= j <= 7 and enemy_type in DIAGONAL_SLIDERS) or (
                                 i == 1 and enemy_type == "p" and (
                                 (enemy_color == "w" and 6 <= j <= 7) or (enemy_color == "b" and 4 <= j <= 5))) or (
-                                enemy_type == "Q") or (i == 1 and enemy_type == "K"):
+                                i == 1 and enemy_type == "K"):
                             if possible_pin == ():  
                                 in_check = True
                                 checks.append((end_row, end_col, direction[0], direction[1]))
@@ -454,7 +472,7 @@ class GameState:
             end_col = start_col + move[1]
             if 0 <= end_row <= 7 and 0 <= end_col <= 7:
                 end_piece = self.board[end_row][end_col]
-                if end_piece[0] == enemy_color and end_piece[1] == "N":  
+                if end_piece[0] == enemy_color and end_piece[1] in KNIGHT_TYPES:
                     in_check = True
                     checks.append((end_row, end_col, move[0], move[1]))
 
@@ -503,7 +521,7 @@ class GameState:
                     moves.append(Move((row, col), (row + 2 * move_amount, col), self.board))
         if col - 1 >= 0:  
             if not piece_pinned or pin_direction == (move_amount, -1):
-                if self.board[row + move_amount][col - 1][0] == enemy_color and self.board[row + move_amount][col - 1][1] != "S":
+                if self.board[row + move_amount][col - 1][0] == enemy_color and self.board[row + move_amount][col - 1][1] not in SENTINEL_FAMILY:
                     self.addPawnMove(moves, (row, col), (row + move_amount, col - 1))
                 if (row + move_amount, col - 1) == self.enpassant_possible and self.board[row][col - 1] == enemy_color + "p":
                     attacking_piece = blocking_piece = False
@@ -527,7 +545,7 @@ class GameState:
                         moves.append(Move((row, col), (row + move_amount, col - 1), self.board, is_enpassant_move=True))
         if col + 1 <= 7:  
             if not piece_pinned or pin_direction == (move_amount, +1):
-                if self.board[row + move_amount][col + 1][0] == enemy_color and self.board[row + move_amount][col + 1][1] != "S":
+                if self.board[row + move_amount][col + 1][0] == enemy_color and self.board[row + move_amount][col + 1][1] not in SENTINEL_FAMILY:
                     self.addPawnMove(moves, (row, col), (row + move_amount, col + 1))
                 if (row + move_amount, col + 1) == self.enpassant_possible and self.board[row][col + 1] == enemy_color + "p":
                     attacking_piece = blocking_piece = False
@@ -551,7 +569,7 @@ class GameState:
                         moves.append(Move((row, col), (row + move_amount, col + 1), self.board, is_enpassant_move=True))
 
     def addPawnMove(self, moves, start, end):
-        """Add a pawn move; a move to the last rank becomes one move per promotion piece."""
+        """Add a pawn or sentinel move; a move to the last rank becomes one move per promotion piece."""
         move = Move(start, end, self.board)
         moves.append(move)
         if move.is_pawn_promotion:
@@ -582,7 +600,7 @@ class GameState:
                     continue  # stepping onto the en passant square captures the pawn (added below)
                 end_piece = board[end_row][end_col]
                 if end_piece == "--" or end_piece[0] == enemy_color:
-                    moves.append(Move((row, col), (end_row, end_col), board))
+                    self.addPawnMove(moves, (row, col), (end_row, end_col))  # promotes on the last rank
 
         if row == start_row and board[row + move_amount][col] == "--" and board[row + 2 * move_amount][col] == "--":
             if not piece_pinned or pin_direction == (move_amount, 0):
@@ -756,8 +774,8 @@ class Move:
         self.end_col = end_square[1]
         self.piece_moved = board[self.start_row][self.start_col]
         self.piece_captured = board[self.end_row][self.end_col]
-        self.is_pawn_promotion = (self.piece_moved == "wp" and self.end_row == 0) or (
-                self.piece_moved == "bp" and self.end_row == 7)
+        # pawns and sentinels promote on the last rank (a sentinel to the sentinel version of the piece)
+        self.is_pawn_promotion = self.piece_moved[1] in "pS" and self.end_row == (0 if self.piece_moved[0] == "w" else 7)
         self.is_enpassant_move = is_enpassant_move
         if self.is_enpassant_move:
             self.piece_captured = board[self.start_row][self.end_col]  # the pawn or sentinel beside us
@@ -765,6 +783,9 @@ class Move:
 
         self.is_capture = self.piece_captured != "--"
         self.promotion_piece = promotion_piece
+        if self.is_pawn_promotion:
+            self.promotion_code = self.piece_moved[0] + (
+                SENTINEL_PROMOTIONS[promotion_piece] if self.piece_moved[1] == "S" else promotion_piece)
         self.moveID = self.start_row * 1000 + self.start_col * 100 + self.end_row * 10 + self.end_col
         if self.is_pawn_promotion:  # queen promotions keep the plain id, so a click matches them
             self.moveID += 10000 * PROMOTION_PIECES.index(promotion_piece)
@@ -787,7 +808,10 @@ class Move:
             move_string = self.cols_to_files[self.start_col] + "x" + end_square if self.is_capture else end_square
             return move_string + "=" + self.promotion_piece if self.is_pawn_promotion else move_string
 
-        move_string = self.piece_moved[1]
+        move_string = NOTATION.get(self.piece_moved[1], self.piece_moved[1])
         if self.is_capture:
             move_string += "x"
-        return move_string + end_square
+        move_string += end_square
+        if self.is_pawn_promotion:  # a sentinel promoting
+            move_string += "=" + NOTATION[self.promotion_code[1]]
+        return move_string
