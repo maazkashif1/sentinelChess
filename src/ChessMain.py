@@ -63,6 +63,19 @@ def play_move_sound(gamestate, move):
         SOUNDS[name].play()
 
 
+def wrap(text, text_font, width):
+    """Split text into lines that fit width pixels."""
+    lines, line = [], ""
+    for word in text.split():
+        candidate = f"{line} {word}".strip()
+        if line and text_font.size(candidate)[0] > width:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    return lines + [line] if line else lines
+
+
 def tinted_square(color):
     surface = pygame.Surface((SQ_SIZE, SQ_SIZE), pygame.SRCALPHA)
     surface.fill(color)
@@ -286,6 +299,19 @@ class Game:
         play_button = Button("Play", (x, 296, width, 44), "accent", font_size=18)
         fen = str(cfg["game"]["start_fen"])
         fen_active = False
+        error = None
+
+        def try_start():
+            """Accept the FEN (or the standard setup) and return True, or show why it is invalid."""
+            nonlocal error
+            text = fen.strip()
+            if text.lower() in ("", "none"):
+                self.start_fen = None
+                return True
+            error = ChessEngine.fen_error(text)
+            if error is None:
+                self.start_fen = text
+            return error is None
 
         while True:
             for event in pygame.event.get():
@@ -293,18 +319,18 @@ class Game:
                     return None
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     fen_active = fen_rect.collidepoint(event.pos)
-                    if play_button.hit(event.pos):
-                        self.start_fen = None if fen.strip().lower() in ("", "none") else fen.strip()
+                    if play_button.hit(event.pos) and try_start():
                         return "start"
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN:
-                        self.start_fen = None if fen.strip().lower() in ("", "none") else fen.strip()
-                        return "start"
-                    if fen_active:
+                        if try_start():
+                            return "start"
+                    elif fen_active:
                         if event.key == pygame.K_BACKSPACE:
                             fen = fen[:-1]
                         elif event.unicode and event.unicode.isprintable():
                             fen += event.unicode
+                        error = None
 
             ui.draw_board(win, preview)
             pygame.draw.rect(win, BG, (BOARD_WIDTH, 0, WINDOW_SIZE[0] - BOARD_WIDTH, BOARD_HEIGHT))
@@ -327,6 +353,9 @@ class Game:
             for i, line in enumerate(("Leave as None for the standard setup.", "Press Enter or Play to start.")):
                 win.blit(font(11).render(line, True, MUTED), (x, fen_rect.bottom + 6 + i * 15))
             play_button.draw(win, pygame.mouse.get_pos())
+            if error:
+                for i, line in enumerate(wrap(error, font(12), width)):
+                    win.blit(font(12).render(line, True, CHECK), (x, play_button.rect.bottom + 12 + i * 16))
 
             pygame.display.flip()
             clock.tick(MAX_FPS)
