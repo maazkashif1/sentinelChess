@@ -108,7 +108,11 @@ def find_best_move(gamestate, valid_moves, zobrist_keys, transposition_table, pr
     next_move = None
 
     if cfg["ai"]["version"] == "v4":
-        score = find_move_v4(gamestate, valid_moves, DEPTH, -CHECKMATE, CHECKMATE, 1 if gamestate.white_to_move else -1, zobrist_keys, transposition_table)
+        # iterative deepening: each pass fills the transposition table with best
+        # moves that order the next, deeper pass (https://www.chessprogramming.org/Iterative_Deepening)
+        turn_multiplier = 1 if gamestate.white_to_move else -1
+        for depth in range(1, DEPTH + 1):
+            score = find_move_v4(gamestate, valid_moves, depth, -CHECKMATE, CHECKMATE, turn_multiplier, zobrist_keys, transposition_table)
         if print_usage:
             print(f"Used the transposition table for this move {transposition_table_hits} time(s).")
             print(f"The transposition table now contains {len(transposition_table)} different board states.")
@@ -129,10 +133,9 @@ EXACT, LOWER_BOUND, UPPER_BOUND = 0, 1, 2
 TT_MAX_ENTRIES = 1_000_000
 
 
-def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zobrist_keys, transposition_table):
+def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zobrist_keys, transposition_table, ply=0):
     """Negamax with alpha-beta pruning (https://www.chessprogramming.org/Alpha-Beta)."""
     global next_move, transposition_table_hits
-    ply = DEPTH - depth
 
     if not valid_moves:
         # checkmate or stalemate; prefer the quickest mate (https://www.chessprogramming.org/Mate_Scores)
@@ -158,7 +161,7 @@ def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zo
     for move in order_moves(valid_moves, entry[3] if entry is not None else None):
         gamestate.makeMove(move)
         next_moves = gamestate.getValidMoves()
-        score = -find_move_v4(gamestate, next_moves, depth - 1, -beta, -alpha, -turn_multiplier, zobrist_keys, transposition_table)
+        score = -find_move_v4(gamestate, next_moves, depth - 1, -beta, -alpha, -turn_multiplier, zobrist_keys, transposition_table, ply + 1)
         gamestate.undoMove()
 
         if score > max_score:
