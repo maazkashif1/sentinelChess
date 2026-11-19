@@ -134,6 +134,11 @@ def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zo
         transposition_table_hits += 1  # Increment the counter
         return transposition_table_entry["score"]
 
+    if not valid_moves:
+        # checkmate or stalemate; prefer the quickest mate (https://www.chessprogramming.org/Mate_Scores)
+        ply = DEPTH - depth
+        return -(CHECKMATE - ply) if gamestate.checkmate else turn_multiplier * STALEMATE
+
     if depth == 0:
         return turn_multiplier * score_board_v4(gamestate)
 
