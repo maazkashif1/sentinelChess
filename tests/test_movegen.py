@@ -11,15 +11,6 @@ def expected():
         return json.load(f)
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _mixer():
-    # Older engine versions load sounds in GameState(); harmless otherwise.
-    import pygame
-    pygame.mixer.init()
-    yield
-    pygame.mixer.quit()
-
-
 def test_perft_from_start(expected):
     for depth, nodes in expected["perft"].items():
         assert h.perft(h.new_gamestate(), int(depth)) == nodes, f"perft({depth})"

@@ -1,10 +1,3 @@
-import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-import pygame
-
-from config import asset_path
-
-
 class GameState:
     def __init__(self, fen=None):
         if fen is None:
@@ -43,12 +36,6 @@ class GameState:
         self.fullmove_number = 0
         self.halfmove_clock = 0
         self.castling_availability = "KQkq"
-
-        self.SOUNDS = {}
-        sounds = ["capture", "castle", "game-end", "game-start", "illegal", "move-check", "move-normal", "promote", "tenseconds"]
-
-        for sound in sounds:
-            self.SOUNDS[sound] = pygame.mixer.Sound(asset_path("sounds", f"{sound}.mp3"))
 
     def makeMove(self, move):
         self.board[move.start_row][move.start_col] = "--"
@@ -101,17 +88,6 @@ class GameState:
             self.halfmove_clock = 0
 
         self.castling_availability = ('K' if self.current_castling_rights.wks else '') + ('Q' if self.current_castling_rights.wqs else '') + ('k' if self.current_castling_rights.bks else '') + ('q' if self.current_castling_rights.bqs else '')
-
-        if move.piece_captured != "--" and not move.is_pawn_promotion:
-            self.SOUNDS["capture"].play()
-        elif move.is_castle_move:
-            self.SOUNDS["castle"].play()
-        elif move.is_pawn_promotion:
-            self.SOUNDS["promote"].play()
-        elif self.inCheck():
-            self.SOUNDS["move-check"].play()
-        else:
-            self.SOUNDS["move-normal"].play()
 
     def undoMove(self):
         if len(self.move_log) != 0:  # make sure that there is a move to undo

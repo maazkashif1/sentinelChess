@@ -33,6 +33,34 @@ UI_FONT = pygame.font.SysFont("Arial", 32)
 MOVE_LOG_FONT = EVAL_FONT = pygame.font.SysFont("Arial", 12)
 FEN_FONT = pygame.font.SysFont("Arial", 10)
 
+SOUND_NAMES = ["capture", "castle", "game-end", "game-start", "illegal", "move-check", "move-normal", "promote", "tenseconds"]
+
+
+def load_sounds():
+    try:
+        return {name: pygame.mixer.Sound(asset_path("sounds", f"{name}.mp3")) for name in SOUND_NAMES}
+    except pygame.error:  # no audio device available
+        return {}
+
+
+SOUNDS = load_sounds()
+
+
+def play_move_sound(gamestate, move):
+    """Play the sound for a move that has just been made on the board."""
+    if move.piece_captured != "--" and not move.is_pawn_promotion:
+        name = "capture"
+    elif move.is_castle_move:
+        name = "castle"
+    elif move.is_pawn_promotion:
+        name = "promote"
+    elif gamestate.inCheck():
+        name = "move-check"
+    else:
+        name = "move-normal"
+    if name in SOUNDS:
+        SOUNDS[name].play()
+
 
 class Button:
     def __init__(self, text, x_pos, y_pos, width, height, enabled):
@@ -484,6 +512,7 @@ class Game:
                                             'current_castling_rights': gamestate.current_castling_rights
                                         }
                                     gamestate.makeMove(valid_moves[i])
+                                    play_move_sound(gamestate, valid_moves[i])
                                     move_made = True
                                     animate = True
                                     square_selected = ()
@@ -540,6 +569,7 @@ class Game:
                 thinking_time = end_time - start_time
                 print(f"This move took {str(thinking_time).split('.')[0]} to calculate. \n")
                 gamestate.makeMove(AI_move)
+                play_move_sound(gamestate, AI_move)
                 move_made = True
                 animate = True
 
