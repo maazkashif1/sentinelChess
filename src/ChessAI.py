@@ -119,7 +119,7 @@ def find_best_move(gamestate, valid_moves, zobrist_keys, transposition_table, pr
         # greedy alg.
         pass
     elif cfg["ai"]["version"] == "v1":
-        find_random_move(valid_moves)
+        next_move = find_random_move(valid_moves)
 
     return next_move
 
