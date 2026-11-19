@@ -1,9 +1,9 @@
 import random
-import yaml
 
-# load the config
-with open("config.yaml") as f:
-    cfg = yaml.load(f, Loader=yaml.FullLoader)
+from ChessEngine import PIECE_VALUES
+from config import load_config
+
+cfg = load_config()
 
 knight_scores = [[-50, -40, -30, -30, -30, -30, -40, -50],
                  [-40, -20, 0, 0, 0, 0, -20, -40],
@@ -68,15 +68,6 @@ king_scores = [[-30, -40, -40, -50, -50, -40, -40, -30],
                [20, 20, 0, 0, 0, 0, 20, 20],
                [20, 30, 10, 0, 0, 10, 30, 20]]
 
-king_piece_square_table_end_game = [[-50, -40, -30, -20, -20, -30, -40, -50],
-                                    [-30, -20, -10, 0, 0, -10, -20, -30],
-                                    [-30, -10, 20, 30, 30, 20, -10, -30],
-                                    [-30, -10, 30, 40, 40, 30, -10, -30],
-                                    [-30, -10, 30, 40, 40, 30, -10, -30],
-                                    [-30, -10, 20, 30, 30, 20, -10, -30],
-                                    [-30, -30, 0, 0, 0, 0, -30, -30],
-                                    [-50, -30, -30, -30, -30, -30, -30, -50]]
-
 piece_position_scores = {"wN": knight_scores,
                          "bN": knight_scores[::-1],
                          "wB": bishop_scores,
@@ -90,10 +81,19 @@ piece_position_scores = {"wN": knight_scores,
                          "wK": king_scores,
                          "bK": king_scores[::-1],
                          "wS": sentinel_pawn_scores,
-                         "bS": sentinel_pawn_scores[::-1]}
+                         "bS": sentinel_pawn_scores[::-1],
+                         # promoted sentinels use the tables of the piece they move like
+                         "wG": queen_scores,
+                         "bG": queen_scores[::-1],
+                         "wT": rook_scores,
+                         "bT": rook_scores[::-1],
+                         "wW": bishop_scores,
+                         "bW": bishop_scores[::-1],
+                         "wH": knight_scores,
+                         "bH": knight_scores[::-1]}
 
-piece_value = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 5}
-pieces = ["bB", "bK", "bN", "bp", "bQ", "bR", "wB", "wK", "wN", "wp", "wQ", "wR", "wS", "bS"]
+piece_value = PIECE_VALUES
+pieces = list(piece_position_scores)  # every piece code, for Zobrist keys
 
 CHECKMATE = cfg["ai"]["points_checkmate"]
 CASTLING_SCORE = cfg["ai"]["castling_score"]
@@ -103,66 +103,128 @@ STALEMATE = cfg["ai"]["points_stalemate"]
 DEPTH = cfg["ai"]["depth"]  # the moves that the engine looks ahead
 
 
-def find_best_move(gamestate, valid_moves, zobrist_keys, transposition_table, print_usage):
-    global next_move, transposition_table_hits
-    transposition_table_hits = 0
+def evaluate_for_display(gamestate, valid_moves, zobrist_keys, transposition_table, depth=None):
+    """Evaluate the current position for the eval bar, from white's point of view, in pawns.
+
+    Runs a shallow search so the number doesn't swing wildly in the middle of an
+    exchange. Mate scores stay near +/-CHECKMATE; use mate_in() to read them.
+    """
+    depth = cfg["ai"].get("eval_depth", 2) if depth is None else depth
+    if gamestate.checkmate:
+        return -CHECKMATE if gamestate.white_to_move else CHECKMATE
+    if gamestate.stalemate or gamestate.rep_stalemate or gamestate.move_draw or gamestate.ins_draw:
+        return 0
+    turn_multiplier = 1 if gamestate.white_to_move else -1
+    score = find_move_v4(gamestate, valid_moves, depth, -CHECKMATE, CHECKMATE, turn_multiplier,
+                         zobrist_keys, transposition_table)
+    gamestate.getValidMoves()  # the search leaves the game-over flags of its last node; restore them
+    return turn_multiplier * score
+
+
+def mate_in(score):
+    """Full moves until mate for a mate score (positive: white mates), or None for a normal score."""
+    if abs(score) < CHECKMATE - 100:
+        return None
+    plies = CHECKMATE - abs(score)
+    moves = (plies + 1) // 2
+    return moves if score > 0 else -moves
+
+
+def find_best_move(gamestate, valid_moves, zobrist_keys, transposition_table):
+    """Return the engine's move for the side to move (ai.version picks the engine)."""
+    global next_move
     next_move = None
 
     if cfg["ai"]["version"] == "v4":
-        score = find_move_v4(gamestate, valid_moves, DEPTH, -CHECKMATE, CHECKMATE, 1 if gamestate.white_to_move else -1, zobrist_keys, transposition_table)
-        if print_usage:
-            print(f"Used the transposition table for this move {transposition_table_hits} time(s).")
-            print(f"The transposition table now contains {len(transposition_table)} different board states.")
-            print(f"The score of the move {next_move} was {score}")
+        # iterative deepening: each pass fills the transposition table with best
+        # moves that order the next, deeper pass (https://www.chessprogramming.org/Iterative_Deepening)
+        turn_multiplier = 1 if gamestate.white_to_move else -1
+        for depth in range(1, DEPTH + 1):
+            find_move_v4(gamestate, valid_moves, depth, -CHECKMATE, CHECKMATE, turn_multiplier, zobrist_keys, transposition_table)
     elif cfg["ai"]["version"] == "v3":
         find_move_v3(gamestate, valid_moves, DEPTH, -CHECKMATE, CHECKMATE, 1 if gamestate.white_to_move else -1)
-    elif cfg["ai"]["version"] == "v2":
-        # greedy alg.
-        pass
     elif cfg["ai"]["version"] == "v1":
-        find_random_move(valid_moves)
+        next_move = find_random_move(valid_moves)
 
     return next_move
 
 
-def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zobrist_keys, transposition_table):
-    global next_move, transposition_table_hits
+# transposition table entry flags (https://www.chessprogramming.org/Transposition_Table)
+EXACT, LOWER_BOUND, UPPER_BOUND = 0, 1, 2
+TT_MAX_ENTRIES = 1_000_000
 
-    zobrist_key = get_position_zobrist(gamestate.board, zobrist_keys)
-    transposition_table_entry = check_zobrist_position(zobrist_key, transposition_table)
 
-    if transposition_table_entry is not None and transposition_table_entry["depth"] >= depth:
-        transposition_table_hits += 1  # Increment the counter
-        return transposition_table_entry["score"]
+def find_move_v4(gamestate, valid_moves, depth, alpha, beta, turn_multiplier, zobrist_keys, transposition_table, ply=0):
+    """Negamax with alpha-beta pruning (https://www.chessprogramming.org/Alpha-Beta)."""
+    global next_move
+
+    if not valid_moves:
+        # checkmate or stalemate; prefer the quickest mate (https://www.chessprogramming.org/Mate_Scores)
+        return -(CHECKMATE - ply) if gamestate.checkmate else turn_multiplier * STALEMATE
+
+    if ply > 0 and (gamestate.rep_stalemate or gamestate.move_draw or gamestate.ins_draw):
+        return turn_multiplier * STALEMATE  # drawn by repetition, 50-move rule or material
 
     if depth == 0:
         return turn_multiplier * score_board_v4(gamestate)
 
+    zobrist_key = get_position_zobrist(gamestate, zobrist_keys)
+    entry = transposition_table.get(zobrist_key)
+    # never cut off at the root: we still need a move to play
+    if entry is not None and ply > 0 and entry[0] >= depth:
+        _, entry_score, flag, _ = entry
+        if (flag == EXACT or (flag == LOWER_BOUND and entry_score >= beta)
+                or (flag == UPPER_BOUND and entry_score <= alpha)):
+            return entry_score
+
+    original_alpha = alpha
     max_score = -CHECKMATE
+    best_move = None
 
-    for move in valid_moves:
-
+    for move in order_moves(valid_moves, entry[3] if entry is not None else None):
         gamestate.makeMove(move)
-
-        # what to do if he didnt
         next_moves = gamestate.getValidMoves()
-        score = -find_move_v4(gamestate, next_moves, depth - 1, -beta, -alpha, -turn_multiplier, zobrist_keys, transposition_table)
+        score = -find_move_v4(gamestate, next_moves, depth - 1, -beta, -alpha, -turn_multiplier, zobrist_keys, transposition_table, ply + 1)
+        gamestate.undoMove()
 
         if score > max_score:
             max_score = score
-            if depth == DEPTH:
+            best_move = move
+            if ply == 0:
                 next_move = move
-
-        gamestate.undoMove()
 
         if max_score > alpha:
             alpha = max_score
         if alpha >= beta:
             break
 
-    add_zobrist_position(zobrist_key, transposition_table, max_score, alpha, beta, depth)
+    if max_score <= original_alpha:
+        flag = UPPER_BOUND
+    elif max_score >= beta:
+        flag = LOWER_BOUND
+    else:
+        flag = EXACT
+    if len(transposition_table) >= TT_MAX_ENTRIES:
+        transposition_table.clear()
+    transposition_table[zobrist_key] = (depth, max_score, flag, best_move.moveID if best_move else None)
 
     return max_score
+
+
+def order_moves(moves, hash_move_id=None):
+    """Search the most promising moves first so alpha-beta prunes more
+    (https://www.chessprogramming.org/Move_Ordering): the stored hash move,
+    then captures by MVV-LVA, then promotions, then quiet moves."""
+    def priority(move):
+        if move.moveID == hash_move_id:
+            return 10_000
+        score = 0
+        if move.piece_captured != "--":
+            score += 1_000 + 10 * piece_value[move.piece_captured[1]] - piece_value[move.piece_moved[1]]
+        if move.is_pawn_promotion:
+            score += 100 * piece_value[move.promotion_piece]
+        return score
+    return sorted(moves, key=priority, reverse=True)
 
 
 def find_move_v3(gamestate, valid_moves, depth, alpha, beta, turn_multiplier):
@@ -205,57 +267,29 @@ def score_board_v4(gamestate):
     elif gamestate.stalemate:
         return STALEMATE
 
+    score = score_material_and_position(gamestate.board)
+
+    # small adjustments for the side that just moved
+    move_log = gamestate.move_log
+    if move_log:
+        sign = -1 if gamestate.white_to_move else 1  # +1 when white made the last move
+        if move_log[-1].is_castle_move:
+            score += sign * CASTLING_SCORE
+        if len(move_log) > 3 and move_log[-1] == move_log[-3]:
+            score -= sign * MOVE_REP_PUNISH
+
+    return score
+
+
+def score_material_and_position(board):
     score = 0
-
-    for row in range(len(gamestate.board)):
-        for col in range(len(gamestate.board[row])):
-            square = gamestate.board[row][col]
+    for row in range(8):
+        board_row = board[row]
+        for col in range(8):
+            square = board_row[col]
             if square != "--":
-                color = square[0]
-                type = square[1]
-
-                if color == "w":
-                    piece_position_score = piece_position_scores["w" + type][row][col]
-                    in_check, pins, checks = gamestate.checkForPinsAndChecks()
-
-                    score += piece_value[square[1]] + piece_position_score * POSITION_WEIGHT
-
-                    if len(gamestate.move_log) > 3:
-                        if str(gamestate.move_log[-1]) == str(gamestate.move_log[-3]):
-                            score -= MOVE_REP_PUNISH
-                        if str(gamestate.move_log[-1]) == "Kc1":
-                            score += CASTLING_SCORE
-                        elif str(gamestate.move_log[-1]) == "Kg1":
-                            score += CASTLING_SCORE
-
-                    """if in_check:
-                        score -= cfg["ai"]["check_punish"]
-
-                    if (len(pins) and len(checks)) > 0:
-                        for punish in range(len(pins)):
-                            score -= punish + 1
-
-                        for punish in range(len(checks)):
-                            score -= punish + 2"""
-
-                elif color == "b":
-                    piece_position_score = piece_position_scores["b" + type][row][col]
-
-                    score -= piece_value[square[1]] + piece_position_score * POSITION_WEIGHT
-
-                    if len(gamestate.move_log) > 3:
-                        if str(gamestate.move_log[-1]) == str(gamestate.move_log[-3]):
-                            score += MOVE_REP_PUNISH
-                        if str(gamestate.move_log[-1]) == "Kg8":
-                            score -= CASTLING_SCORE
-                        elif str(gamestate.move_log[-1]) == "Kc8":
-                            score -= CASTLING_SCORE
-
-                if gamestate.move_log[-1] == ("Kc1" or "Kg1" or "Kc8" or "Kg8" or "0-0" or "0-0-0"):
-                    print("Found King Castle Move")
-                    with open("king_moves.txt", "a") as file:
-                        file.write(f"King Move {gamestate.move_log[-1]} had a score of {score}\n")
-
+                value = piece_value[square[1]] + piece_position_scores[square][row][col] * POSITION_WEIGHT
+                score += value if square[0] == "w" else -value
     return score
 
 
@@ -290,48 +324,40 @@ def score_board_v3(gamestate):
 
 
 def generate_zobrist_keys():
+    """Random keys for Zobrist hashing (https://www.chessprogramming.org/Zobrist_Hashing)."""
     zobrist_keys = {}
 
     for row in range(8):
         for col in range(8):
-            piece_zobrist_keys = {piece: random.getrandbits(64) for piece in pieces}
-            zobrist_keys[(row, col)] = piece_zobrist_keys
+            zobrist_keys[(row, col)] = {piece: random.getrandbits(64) for piece in pieces}
+    zobrist_keys["black_to_move"] = random.getrandbits(64)
+    zobrist_keys["castling"] = [random.getrandbits(64) for _ in range(4)]
+    zobrist_keys["enpassant_file"] = [random.getrandbits(64) for _ in range(8)]
 
     return zobrist_keys
 
 
-def get_position_zobrist(board, zobrist_keys):
+def get_position_zobrist(gamestate, zobrist_keys):
+    """Hash the board plus side to move, castling rights and en passant file."""
     key = 0
-
+    board = gamestate.board
     for row in range(8):
         for col in range(8):
             piece = board[row][col]
             if piece != "--":
                 key ^= zobrist_keys[(row, col)][piece]
 
+    if not gamestate.white_to_move:
+        key ^= zobrist_keys["black_to_move"]
+    rights = gamestate.current_castling_rights
+    for i, right in enumerate((rights.wks, rights.wqs, rights.bks, rights.bqs)):
+        if right:
+            key ^= zobrist_keys["castling"][i]
+    if gamestate.enpassant_possible:
+        key ^= zobrist_keys["enpassant_file"][gamestate.enpassant_possible[1]]
+
     return key
-
-
-def check_zobrist_position(zobrist_key, transposition_table):
-    try:
-        transposition_table_entry = transposition_table[zobrist_key]
-        return transposition_table_entry
-
-    except KeyError:
-        return None
-
-
-def add_zobrist_position(zobrist_key, transposition_table, score, alpha, beta, depth):
-    transposition_table[zobrist_key] = {"depth": depth, "score": score, "alpha": alpha, "beta": beta}
 
 
 def find_random_move(valid_moves):
     return random.choice(valid_moves)
-
-# stages:
-# random
-# greedy
-# min max
-# alpha beta pruning
-# transposition tables
-# improvement of board scoring

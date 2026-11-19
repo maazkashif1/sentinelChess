@@ -1,0 +1,24 @@
+[project]
+name = "sentinel-chess"
+version = "0.1.0"
+description = "Chess variant with the Sentinel, a pawn that moves one square in any direction and shields adjacent allies from capture."
+requires-python = ">=3.10"
+dependencies = [
+    "pygame-ce>=2.5.8",
+    "pyyaml>=6.0.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+art = [
+    "pillow>=11",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]

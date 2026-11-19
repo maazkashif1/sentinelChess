@@ -1,6 +1,66 @@
-import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-import pygame
+# Piece codes are a colour ("w"/"b") plus a type letter. The sentinel family:
+#   S  sentinel (pawn-like)   G  sentinel queen   T  sentinel rook
+#   W  sentinel bishop        H  sentinel knight
+# A sentinel reaching the last rank must promote to G, T, W or H. Every member
+# of the family protects the allies on the squares it covers (where it could
+# move) from capture, and is immune to pawns.
+SENTINEL_FAMILY = "SGTWH"
+SENTINEL_PROMOTIONS = {"Q": "G", "R": "T", "B": "W", "N": "H"}
+ORTHOGONAL_SLIDERS = "RQTG"
+DIAGONAL_SLIDERS = "BQWG"
+KNIGHT_TYPES = "NH"
+NOTATION = {"G": "SQ", "T": "SR", "W": "SB", "H": "SN"}
+
+# material values used by the AI's evaluation (and so the eval bar)
+PIECE_VALUES = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 4,
+                "G": 10, "T": 6, "W": 4, "H": 4}
+
+PROMOTION_PIECES = "QRBN"  # queen first: it is the default promotion
+
+KNIGHT_OFFSETS = ((-2, -1), (-2, 1), (-1, 2), (1, 2), (2, -1), (2, 1), (-1, -2), (1, -2))
+KING_OFFSETS = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+ROOK_DIRECTIONS = ((-1, 0), (0, -1), (1, 0), (0, 1))
+BISHOP_DIRECTIONS = ((-1, -1), (-1, 1), (1, 1), (1, -1))
+
+
+def fen_error(fen):
+    """Return why a FEN string can't start a game, or None if it is usable."""
+    fields = fen.split()
+    if not fields:
+        return "The FEN is empty."
+    ranks = fields[0].split("/")
+    if len(ranks) != 8:
+        return "The board needs 8 ranks separated by '/'."
+    for number, rank in zip(range(8, 0, -1), ranks):
+        squares = 0
+        for char in rank:
+            if char in "12345678":
+                squares += int(char)
+            elif char.upper() in "KQRBNP" + SENTINEL_FAMILY:
+                squares += 1
+            else:
+                return f"Unknown piece '{char}' on rank {number}."
+        if squares != 8:
+            return f"Rank {number} has {squares} squares instead of 8."
+    if len(fields) > 1 and fields[1] not in ("w", "b"):
+        return "Side to move must be 'w' or 'b'."
+    if len(fields) > 3 and fields[3] != "-" and not (
+            len(fields[3]) == 2 and fields[3][0] in "abcdefgh" and fields[3][1] in "36"):
+        return "The en passant square must be '-' or a square on rank 3 or 6."
+
+    gs = GameState(fen=fen)
+    flat = [piece for row in gs.board for piece in row]
+    if flat.count("wK") != 1 or flat.count("bK") != 1:
+        return "Each side needs exactly one king."
+    if any(piece[1] == "p" for piece in gs.board[0] + gs.board[7]):
+        return "Pawns can't stand on the first or last rank."
+    if "wS" in gs.board[0] or "bS" in gs.board[7]:
+        return "A sentinel on its last rank must already have promoted."
+    mover, waiting = ("White", "Black") if gs.white_to_move else ("Black", "White")
+    gs.white_to_move = not gs.white_to_move
+    if gs.inCheck():
+        return f"{waiting} is in check, but it is {mover}'s turn."
+    return None
 
 
 class GameState:
@@ -20,7 +80,8 @@ class GameState:
 
         self.moveFunctions = {"p": self.getPawnMoves, "R": self.getRookMoves, "N": self.getKnightMoves,
                               "B": self.getBishopMoves, "Q": self.getQueenMoves, "K": self.getKingMoves,
-                              "S": self.getSentinelPawnMoves}
+                              "S": self.getSentinelPawnMoves, "G": self.getQueenMoves, "T": self.getRookMoves,
+                              "W": self.getBishopMoves, "H": self.getKnightMoves}
         self.white_to_move = True
         self.move_log = []
         self.white_king_location = (7, 4)
@@ -28,32 +89,70 @@ class GameState:
         self.checkmate = False
         self.stalemate = False
         self.rep_stalemate = False
-        self.move_draw = False
-        self.ins_draw = False
+        self.move_draw = False  # 50-move rule
+        self.ins_draw = False  # insufficient material
+        self.halfmove_clock = 0  # plies since the last capture or pawn/sentinel move
+        self.halfmove_log = []
         self.in_check = False
         self.pins = []
         self.checks = []
         self.enpassant_possible = ()  # coordinates for the square where en-passant capture is possible
         self.enpassant_possible_log = [self.enpassant_possible]
         self.current_castling_rights = CastleRights(True, True, True, True)
+        if fen is not None:
+            self.load_fen_state(fen)
         self.castle_rights_log = [CastleRights(self.current_castling_rights.wks, self.current_castling_rights.bks,
                                                self.current_castling_rights.wqs, self.current_castling_rights.bqs)]
-        self.fullmove_number = 0
-        self.halfmove_clock = 0
-        self.castling_availability = "KQkq"
+        # how often each position has occurred, for threefold repetition
+        self.position_log = [self.positionKey()]
+        self.position_counts = {self.position_log[0]: 1}
 
-        self.SOUNDS = {}
-        sounds = ["capture", "castle", "game-end", "game-start", "illegal", "move-check", "move-normal", "promote", "tenseconds"]
+    def positionKey(self):
+        """Identify a position for repetition: board, side to move, castling rights, en passant square."""
+        rights = self.current_castling_rights
+        return ("".join(["".join(row) for row in self.board]), self.white_to_move,
+                rights.wks, rights.wqs, rights.bks, rights.bqs, self.enpassant_possible)
 
-        for sound in sounds:
-            self.SOUNDS[sound] = pygame.mixer.Sound(os.path.join("sounds", f"{sound}.mp3"))
+    def load_fen_state(self, fen):
+        """Apply side to move, castling rights, en passant square and king squares from a FEN string."""
+        fields = fen.split()
+        side = fields[1] if len(fields) > 1 else "w"
+        castling = fields[2] if len(fields) > 2 else "-"
+        enpassant = fields[3] if len(fields) > 3 else "-"
+
+        self.white_to_move = side != "b"
+        for row in range(8):
+            for col in range(8):
+                if self.board[row][col] == "wK":
+                    self.white_king_location = (row, col)
+                elif self.board[row][col] == "bK":
+                    self.black_king_location = (row, col)
+
+        # only keep a castling right if the king and rook are still on their home squares
+        def can_castle(flag, row, rook_col, color):
+            return (flag in castling and self.board[row][4] == color + "K"
+                    and self.board[row][rook_col] == color + "R")
+        self.current_castling_rights = CastleRights(can_castle("K", 7, 7, "w"), can_castle("k", 0, 7, "b"),
+                                                    can_castle("Q", 7, 0, "w"), can_castle("q", 0, 0, "b"))
+
+        if len(fields) > 4 and fields[4].isdigit():
+            self.halfmove_clock = int(fields[4])
+
+        if enpassant != "-" and len(enpassant) == 2:
+            self.enpassant_possible = (8 - int(enpassant[1]), "abcdefgh".index(enpassant[0]))
+        self.enpassant_possible_log = [self.enpassant_possible]
 
     def makeMove(self, move):
         self.board[move.start_row][move.start_col] = "--"
         self.board[move.end_row][move.end_col] = move.piece_moved
         
         self.move_log.append(move)
-        
+
+        self.halfmove_log.append(self.halfmove_clock)
+        if move.piece_captured != "--" or move.piece_moved[1] in "pS":
+            self.halfmove_clock = 0
+        else:
+            self.halfmove_clock += 1
         self.white_to_move = not self.white_to_move
         
         if move.piece_moved == "wK":
@@ -62,12 +161,12 @@ class GameState:
             self.black_king_location = (move.end_row, move.end_col)
 
         if move.is_pawn_promotion:
-            self.board[move.end_row][move.end_col] = move.piece_moved[0] + "Q"
+            self.board[move.end_row][move.end_col] = move.promotion_code
 
         if move.is_enpassant_move:
             self.board[move.start_row][move.end_col] = "--" 
 
-        if move.piece_moved[1] == "p" and abs(move.start_row - move.end_row) == 2:  
+        if move.piece_moved[1] in "pS" and abs(move.start_row - move.end_row) == 2:  # pawn or sentinel double step  
             self.enpassant_possible = ((move.start_row + move.end_row) // 2, move.start_col)
         else:
             self.enpassant_possible = ()
@@ -90,30 +189,16 @@ class GameState:
         self.castle_rights_log.append(CastleRights(self.current_castling_rights.wks, self.current_castling_rights.bks,
                                                    self.current_castling_rights.wqs, self.current_castling_rights.bqs))
 
-        # Update fullmove number and halfmove clock
-        if self.white_to_move:
-            self.fullmove_number += 1
-        self.halfmove_clock += 1
-
-        if move.piece_captured or move.piece_moved[1] == 'p' or move.piece_moved[1] == 'S':
-            self.halfmove_clock = 0
-
-        self.castling_availability = ('K' if self.current_castling_rights.wks else '') + ('Q' if self.current_castling_rights.wqs else '') + ('k' if self.current_castling_rights.bks else '') + ('q' if self.current_castling_rights.bqs else '')
-
-        if move.piece_captured != "--" and not move.is_pawn_promotion:
-            self.SOUNDS["capture"].play()
-        elif move.is_castle_move:
-            self.SOUNDS["castle"].play()
-        elif move.is_pawn_promotion:
-            self.SOUNDS["promote"].play()
-        elif self.inCheck():
-            self.SOUNDS["move-check"].play()
-        else:
-            self.SOUNDS["move-normal"].play()
+        key = self.positionKey()
+        self.position_log.append(key)
+        self.position_counts[key] = self.position_counts.get(key, 0) + 1
 
     def undoMove(self):
         if len(self.move_log) != 0:  # make sure that there is a move to undo
             move = self.move_log.pop()
+            key = self.position_log.pop()
+            self.position_counts[key] -= 1
+            self.halfmove_clock = self.halfmove_log.pop()
             self.board[move.start_row][move.start_col] = move.piece_moved
             self.board[move.end_row][move.end_col] = move.piece_captured
             self.white_to_move = not self.white_to_move  # swap players
@@ -132,7 +217,8 @@ class GameState:
 
             # undo castle rights
             self.castle_rights_log.pop()  # get rid of the new castle rights from the move we are undoing
-            self.current_castling_rights = self.castle_rights_log[-1]  # set the current castle rights to the last one in the list
+            # copy, so later moves cannot mutate the logged entry in place
+            self.current_castling_rights = self.castle_rights_log[-1].copy()
             # undo the castle move
             if move.is_castle_move:
                 if move.end_col - move.start_col == 2:  # king-side
@@ -164,29 +250,6 @@ class GameState:
 
             board.append(brow)
         return board
-
-    @staticmethod
-    def coordinate_to_square(coord):
-        file_mapping = {0: 'a', 1: 'b', 2: 'c', 3: 'd', 4: 'e', 5: 'f', 6: 'g', 7: 'h'}
-        rank = 8 - coord[0]
-        file = file_mapping[coord[1]]
-        return file + str(rank)
-
-    def evaluate(self, board):
-        piece_values = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 4}
-
-        score = 0
-
-        for row in board:
-            for square in row:
-                piece_type = square[1]
-                if piece_type in piece_values:
-                    if square[0] == "w":
-                        score += piece_values[piece_type]
-                    else:
-                        score -= piece_values[piece_type]
-
-        return score
 
     def updateCastleRights(self, move):
         if move.piece_captured == "wR":
@@ -244,7 +307,7 @@ class GameState:
                 check_col = check[1]
                 piece_checking = self.board[check_row][check_col]
                 valid_squares = []  
-                if piece_checking[1] == "N":
+                if piece_checking[1] in KNIGHT_TYPES:
                     valid_squares = [(check_row, check_col)]
                 else:
                     for i in range(1, 8):
@@ -253,11 +316,10 @@ class GameState:
                         valid_squares.append(valid_square)
                         if valid_square[0] == check_row and valid_square[1] == check_col:  
                             break
-                for i in range(len(moves) - 1, -1, -1):  
-                    if moves[i].piece_moved[1] != "K":  
-                        if not (moves[i].end_row, moves[i].end_col) in valid_squares:  
-                            moves.remove(moves[i])
-            else:  
+                valid_squares = set(valid_squares)
+                moves = [m for m in moves if m.piece_moved[1] == "K" or (m.end_row, m.end_col) in valid_squares]
+            else:  # double check: only the king may move
+                moves = []
                 self.getKingMoves(king_row, king_col, moves)
         else:  
             if self.white_to_move:
@@ -265,14 +327,13 @@ class GameState:
             else:
                 self.getCastleMoves(self.black_king_location[0], self.black_king_location[1], moves)
 
-        for i in range(len(moves) - 1, -1, -1):
-            move = moves[i]
-            if move.piece_captured != "--":  # If this is a capture move
-                if self.isDefendedBySentinel(move.end_row, move.end_col):
-                    moves.remove(move)
+        # captures of a piece standing next to its own sentinel are not allowed
+        # (en passant captures a pawn that stands beside the landing square)
+        moves = [m for m in moves if m.piece_captured == "--" or (m.piece_captured[1] != "K" and not self.isDefendedBySentinel(
+            m.start_row if m.is_enpassant_move else m.end_row, m.end_col))]
 
         if len(moves) == 0:
-            if self.inCheck():
+            if self.in_check:
                 self.checkmate = True
             else:
                 self.stalemate = True
@@ -280,37 +341,104 @@ class GameState:
             self.checkmate = False
             self.stalemate = False
 
-        if len(self.move_log) > 6 and self.move_log[-1] == self.move_log[-3] == self.move_log[-5]:
-            self.rep_stalemate = True
+        # threefold repetition: the current position has occurred three times
+        self.rep_stalemate = self.position_counts[self.position_log[-1]] >= 3
+        # 50-move rule: 100 plies without a capture or a pawn/sentinel move
+        self.move_draw = self.halfmove_clock >= 100
+        self.ins_draw = self.insufficientMaterial()
 
         self.current_castling_rights = temp_castle_rights
         return moves
 
+    def insufficientMaterial(self):
+        """True when neither side can ever checkmate: K v K, K + minor piece v K,
+        or kings with bishops that all stand on squares of one colour."""
+        minors = []
+        for row in range(8):
+            for col in range(8):
+                piece_type = self.board[row][col][1]
+                if piece_type in "pSRQTG":
+                    return False
+                if piece_type in "BNWH":
+                    minors.append(("B" if piece_type in "BW" else "N", (row + col) % 2))
+        if len(minors) <= 1:
+            return True
+        return all(t == "B" for t, _ in minors) and len({shade for _, shade in minors}) == 1
+
     def inCheck(self):
         if self.white_to_move:
-            return self.squareUnderAttack(self.white_king_location[0], self.white_king_location[1])
-        else:
-            return self.squareUnderAttack(self.black_king_location[0], self.black_king_location[1])
+            row, col = self.white_king_location
+            return self.isAttackedBy(row, col, "b")
+        row, col = self.black_king_location
+        return self.isAttackedBy(row, col, "w")
 
-    def squareUnderAttack(self, row, col):
-        self.white_to_move = not self.white_to_move  # switch to opponent's point of view
-        opponents_moves = self.getAllPossibleMoves()
-        self.white_to_move = not self.white_to_move
-        for move in opponents_moves:
-            if move.end_row == row and move.end_col == col:  # square is under attack
+    def isAttackedBy(self, row, col, color):
+        """Return True if a piece of `color` attacks the square (row, col).
+
+        Scans outwards from the target square instead of generating every
+        opponent move (https://www.chessprogramming.org/Square_Attacked_By).
+        """
+        board = self.board
+        pawn_row = row + 1 if color == "w" else row - 1
+        if 0 <= pawn_row <= 7:
+            for c in (col - 1, col + 1):
+                if 0 <= c <= 7 and board[pawn_row][c] == color + "p":
+                    return True
+        for dr, dc in KNIGHT_OFFSETS:
+            r, c = row + dr, col + dc
+            if 0 <= r <= 7 and 0 <= c <= 7 and board[r][c][0] == color and board[r][c][1] in KNIGHT_TYPES:
                 return True
+        for dr, dc in KING_OFFSETS:  # kings and sentinels attack adjacent squares
+            r, c = row + dr, col + dc
+            if 0 <= r <= 7 and 0 <= c <= 7:
+                piece = board[r][c]
+                if piece[0] == color and piece[1] in "KS":
+                    return True
+        for directions, sliders in ((ROOK_DIRECTIONS, ORTHOGONAL_SLIDERS), (BISHOP_DIRECTIONS, DIAGONAL_SLIDERS)):
+            for dr, dc in directions:
+                r, c = row + dr, col + dc
+                while 0 <= r <= 7 and 0 <= c <= 7:
+                    piece = board[r][c]
+                    if piece != "--":
+                        if piece[0] == color and piece[1] in sliders:
+                            return True
+                        break
+                    r += dr
+                    c += dc
         return False
 
+    def squareUnderAttack(self, row, col):
+        """Return True if the side not to move attacks (row, col)."""
+        return self.isAttackedBy(row, col, "b" if self.white_to_move else "w")
+
     def isDefendedBySentinel(self, row, col):
-        directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-        for d in directions:
-            check_row = row + d[0]
-            check_col = col + d[1]
-            if 0 <= check_row <= 7 and 0 <= check_col <= 7:
-                piece = self.board[check_row][check_col]
-                if piece[1] == "S":  
-                    if piece[0] == self.board[row][col][0]:
-                        return True
+        """True if a friendly sentinel-family piece covers (row, col), i.e. could move there.
+
+        A sentinel covers the 8 squares around it; a sentinel knight covers its
+        knight jumps; sentinel rooks, bishops and queens cover their lines up to
+        and including the first piece in the way, as on the current board.
+        """
+        board = self.board
+        color = board[row][col][0]
+        for dr, dc in KING_OFFSETS:
+            r, c = row + dr, col + dc
+            if 0 <= r <= 7 and 0 <= c <= 7 and board[r][c] == color + "S":
+                return True
+        for dr, dc in KNIGHT_OFFSETS:
+            r, c = row + dr, col + dc
+            if 0 <= r <= 7 and 0 <= c <= 7 and board[r][c] == color + "H":
+                return True
+        for directions, guards in ((ROOK_DIRECTIONS, "TG"), (BISHOP_DIRECTIONS, "WG")):
+            for dr, dc in directions:
+                r, c = row + dr, col + dc
+                while 0 <= r <= 7 and 0 <= c <= 7:
+                    piece = board[r][c]
+                    if piece != "--":
+                        if piece[0] == color and piece[1] in guards:
+                            return True
+                        break
+                    r += dr
+                    c += dc
         return False
 
     def getAllPossibleMoves(self):
@@ -359,10 +487,11 @@ class GameState:
                         # 3.) 1 square away diagonally from king and piece is a pawn
                         # 4.) any direction and piece is a queen
                         # 5.) any direction 1 square away and piece is a king
-                        if (0 <= j <= 3 and enemy_type == "R") or (4 <= j <= 7 and enemy_type == "B") or (
+                        if (0 <= j <= 3 and enemy_type in ORTHOGONAL_SLIDERS) or (
+                                4 <= j <= 7 and enemy_type in DIAGONAL_SLIDERS) or (
                                 i == 1 and enemy_type == "p" and (
                                 (enemy_color == "w" and 6 <= j <= 7) or (enemy_color == "b" and 4 <= j <= 5))) or (
-                                enemy_type == "Q") or (i == 1 and enemy_type == "K"):
+                                i == 1 and enemy_type == "K"):
                             if possible_pin == ():  
                                 in_check = True
                                 checks.append((end_row, end_col, direction[0], direction[1]))
@@ -381,7 +510,7 @@ class GameState:
             end_col = start_col + move[1]
             if 0 <= end_row <= 7 and 0 <= end_col <= 7:
                 end_piece = self.board[end_row][end_col]
-                if end_piece[0] == enemy_color and end_piece[1] == "N":  
+                if end_piece[0] == enemy_color and end_piece[1] in KNIGHT_TYPES:
                     in_check = True
                     checks.append((end_row, end_col, move[0], move[1]))
 
@@ -401,15 +530,16 @@ class GameState:
 
         return in_check, pins, checks
 
+    def pinDirection(self, row, col):
+        """Direction (from the king) of the pin on the piece at (row, col), or None if it is not pinned."""
+        for pin in self.pins:
+            if pin[0] == row and pin[1] == col:
+                return pin[2], pin[3]
+        return None
+
     def getPawnMoves(self, row, col, moves):
-        piece_pinned = False
-        pin_direction = ()
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                pin_direction = (self.pins[i][2], self.pins[i][3])
-                self.pins.remove(self.pins[i])
-                break
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         if self.white_to_move:
             move_amount = -1
@@ -424,14 +554,14 @@ class GameState:
 
         if self.board[row + move_amount][col] == "--":  
             if not piece_pinned or pin_direction == (move_amount, 0):
-                moves.append(Move((row, col), (row + move_amount, col), self.board))
+                self.addPawnMove(moves, (row, col), (row + move_amount, col))
                 if row == start_row and self.board[row + 2 * move_amount][col] == "--":  
                     moves.append(Move((row, col), (row + 2 * move_amount, col), self.board))
         if col - 1 >= 0:  
             if not piece_pinned or pin_direction == (move_amount, -1):
-                if self.board[row + move_amount][col - 1][0] == enemy_color and self.board[row + move_amount][col - 1][1] != "S":
-                    moves.append(Move((row, col), (row + move_amount, col - 1), self.board))
-                if (row + move_amount, col - 1) == self.enpassant_possible:
+                if self.board[row + move_amount][col - 1][0] == enemy_color and self.board[row + move_amount][col - 1][1] not in SENTINEL_FAMILY:
+                    self.addPawnMove(moves, (row, col), (row + move_amount, col - 1))
+                if (row + move_amount, col - 1) == self.enpassant_possible and self.board[row][col - 1] == enemy_color + "p":
                     attacking_piece = blocking_piece = False
                     if king_row == row:
                         if king_col < col:  
@@ -453,9 +583,9 @@ class GameState:
                         moves.append(Move((row, col), (row + move_amount, col - 1), self.board, is_enpassant_move=True))
         if col + 1 <= 7:  
             if not piece_pinned or pin_direction == (move_amount, +1):
-                if self.board[row + move_amount][col + 1][0] == enemy_color and self.board[row + move_amount][col + 1][1] != "S":
-                    moves.append(Move((row, col), (row + move_amount, col + 1), self.board))
-                if (row + move_amount, col + 1) == self.enpassant_possible:
+                if self.board[row + move_amount][col + 1][0] == enemy_color and self.board[row + move_amount][col + 1][1] not in SENTINEL_FAMILY:
+                    self.addPawnMove(moves, (row, col), (row + move_amount, col + 1))
+                if (row + move_amount, col + 1) == self.enpassant_possible and self.board[row][col + 1] == enemy_color + "p":
                     attacking_piece = blocking_piece = False
                     if king_row == row:
                         if king_col < col:  
@@ -476,117 +606,79 @@ class GameState:
                     if not attacking_piece or blocking_piece:
                         moves.append(Move((row, col), (row + move_amount, col + 1), self.board, is_enpassant_move=True))
 
+    def addPawnMove(self, moves, start, end):
+        """Add a pawn or sentinel move; a move to the last rank becomes one move per promotion piece."""
+        move = Move(start, end, self.board)
+        moves.append(move)
+        if move.is_pawn_promotion:
+            for piece in PROMOTION_PIECES[1:]:
+                moves.append(Move(start, end, self.board, promotion_piece=piece))
+
     def getSentinelPawnMoves(self, row, col, moves):
-        piece_pinned = False
-        pin_direction = ()
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                pin_direction = (self.pins[i][2], self.pins[i][3])
-                self.pins.remove(self.pins[i])
-                break
+        """Sentinel: steps one square in any direction (like a king), may
+        double-step forward from its starting rank and can capture en passant."""
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         if self.white_to_move:
-            move_amount = -1
-            start_row = 6
-            enemy_color = "b"
+            move_amount, start_row, enemy_color = -1, 6, "b"
             king_row, king_col = self.white_king_location
-            enemy_king_row, enemy_king_col = self.black_king_location
         else:
-            move_amount = 1
-            start_row = 1
-            enemy_color = "w"
+            move_amount, start_row, enemy_color = 1, 1, "w"
             king_row, king_col = self.black_king_location
-            enemy_king_row, enemy_king_col = self.white_king_location
 
-        directions = [
-            (-1, -1), (-1, 0), (-1, 1),  
-            (0, -1), (0, 1),             
-            (1, -1), (1, 0), (1, 1)      
-        ]
-
-        for d in directions:
+        board = self.board
+        enpassant_move = self.getSentinelEnpassantMove(row, col, piece_pinned, pin_direction,
+                                                       enemy_color, king_row, king_col)
+        for d in KING_OFFSETS:
             end_row = row + d[0]
             end_col = col + d[1]
-            
-            if 0 <= end_row < 8 and 0 <= end_col < 8:
-                if not piece_pinned or pin_direction == d:
-                    if self.board[end_row][end_col] == "--":
-                        if abs(end_row - enemy_king_row) <= 1 and abs(end_col - enemy_king_col) <= 1:
-                            move = Move((row, col), (end_row, end_col), self.board)
-                            move.is_check = True
-                            moves.append(move)
-                        else:
-                            moves.append(Move((row, col), (end_row, end_col), self.board))
-                    elif self.board[end_row][end_col][0] == enemy_color:
-                        if abs(end_row - enemy_king_row) <= 1 and abs(end_col - enemy_king_col) <= 1:
-                            move = Move((row, col), (end_row, end_col), self.board)
-                            move.is_capture = True
-                            move.is_check = True
-                            moves.append(move)
-                        else:
-                            move = Move((row, col), (end_row, end_col), self.board)
-                            move.is_capture = True
-                            moves.append(move)
+            if 0 <= end_row < 8 and 0 <= end_col < 8 and (not piece_pinned or pin_direction == d):
+                if enpassant_move is not None and (end_row, end_col) == self.enpassant_possible:
+                    continue  # stepping onto the en passant square captures the pawn (added below)
+                end_piece = board[end_row][end_col]
+                if end_piece == "--" or end_piece[0] == enemy_color:
+                    self.addPawnMove(moves, (row, col), (end_row, end_col))  # promotes on the last rank
 
-        if row == start_row and self.board[row + 2 * move_amount][col] == "--" and self.board[row + move_amount][col] == "--":
+        if row == start_row and board[row + move_amount][col] == "--" and board[row + 2 * move_amount][col] == "--":
             if not piece_pinned or pin_direction == (move_amount, 0):
-                if abs((row + 2 * move_amount) - enemy_king_row) <= 1 and abs(col - enemy_king_col) <= 1:
-                    move = Move((row, col), (row + 2 * move_amount, col), self.board)
-                    move.is_check = True
-                    moves.append(move)
-                else:
-                    moves.append(Move((row, col), (row + 2 * move_amount, col), self.board))
+                moves.append(Move((row, col), (row + 2 * move_amount, col), board))
 
-        if self.enpassant_possible:
-            for d in directions:
-                end_row = row + d[0]
-                end_col = col + d[1]
-                
-                if 0 <= end_row < 8 and 0 <= end_col < 8:
-                    if (end_row, end_col) == self.enpassant_possible:
-                        if not piece_pinned or pin_direction == d:
-                            captured_row = row
-                            captured_col = end_col
-                            if self.board[captured_row][captured_col][1] == "p":
-                                attacking_piece = blocking_piece = False
-                                if king_row == row:
-                                    if king_col < col:
-                                        inside_range = range(king_col + 1, col)
-                                        outside_range = range(col + 1, 8)
-                                    else:
-                                        inside_range = range(king_col - 1, col + 1, -1)
-                                        outside_range = range(col - 1, -1, -1)
-                                    for i in inside_range:
-                                        if self.board[row][i] != "--":
-                                            blocking_piece = True
-                                    for i in outside_range:
-                                        square = self.board[row][i]
-                                        if square[0] == enemy_color and square[1] in ("R", "Q"):
-                                            attacking_piece = True
-                                        elif square != "--":
-                                            blocking_piece = True
-                                if not attacking_piece or blocking_piece:
-                                    if abs(end_row - enemy_king_row) <= 1 and abs(end_col - enemy_king_col) <= 1:
-                                        move = Move((row, col), (end_row, end_col), self.board, is_enpassant_move=True)
-                                        move.is_capture = True
-                                        move.is_check = True
-                                        moves.append(move)
-                                    else:
-                                        move = Move((row, col), (end_row, end_col), self.board, is_enpassant_move=True)
-                                        move.is_capture = True
-                                        moves.append(move)
+        if enpassant_move is not None:
+            moves.append(enpassant_move)
+
+    def getSentinelEnpassantMove(self, row, col, piece_pinned, pin_direction, enemy_color, king_row, king_col):
+        """Return the sentinel's en passant capture, or None if it has none."""
+        if not self.enpassant_possible:
+            return None
+        board = self.board
+        for d in KING_OFFSETS:
+            end_row = row + d[0]
+            end_col = col + d[1]
+            if (end_row, end_col) != self.enpassant_possible:
+                continue
+            if piece_pinned and pin_direction != d:
+                return None
+            if board[row][end_col] not in (enemy_color + "p", enemy_color + "S"):
+                return None
+            # both the sentinel and the captured pawn leave this rank: make sure
+            # that does not open a rook or queen line onto the king
+            if king_row == row:
+                step = 1 if king_col < col else -1
+                c = king_col + step
+                while 0 <= c <= 7:
+                    square = board[row][c]
+                    if c not in (col, end_col) and square != "--":
+                        if square[0] == enemy_color and square[1] in ("R", "Q"):
+                            return None
+                        break
+                    c += step
+            return Move((row, col), (end_row, end_col), board, is_enpassant_move=True)
+        return None
 
     def getRookMoves(self, row, col, moves):
-        piece_pinned = False
-        pin_direction = ()
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                pin_direction = (self.pins[i][2], self.pins[i][3])
-                if self.board[row][col][1] != "Q":  
-                    self.pins.remove(self.pins[i])
-                break
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         directions = ((-1, 0), (0, -1), (1, 0), (0, 1))  
         enemy_color = "b" if self.white_to_move else "w"
@@ -609,12 +701,8 @@ class GameState:
                     break
 
     def getKnightMoves(self, row, col, moves):
-        piece_pinned = False
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                self.pins.remove(self.pins[i])
-                break
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         knight_moves = ((-2, -1), (-2, 1), (-1, 2), (1, 2), (2, -1), (2, 1), (-1, -2), (1, -2))
         ally_color = "w" if self.white_to_move else "b"
@@ -628,14 +716,8 @@ class GameState:
                         moves.append(Move((row, col), (end_row, end_col), self.board))
 
     def getBishopMoves(self, row, col, moves):
-        piece_pinned = False
-        pin_direction = ()
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                pin_direction = (self.pins[i][2], self.pins[i][3])
-                self.pins.remove(self.pins[i])
-                break
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         directions = ((-1, -1), (-1, 1), (1, 1), (1, -1))  
         enemy_color = "b" if self.white_to_move else "w"
@@ -684,8 +766,7 @@ class GameState:
                         self.black_king_location = (row, col)
 
     def getCastleMoves(self, row, col, moves):
-        if self.squareUnderAttack(row, col):
-            return  
+        # only called when the king is not in check
         if (self.white_to_move and self.current_castling_rights.wks) or (
                 not self.white_to_move and self.current_castling_rights.bks):
             self.getKingsideCastleMoves(row, col, moves)
@@ -711,6 +792,9 @@ class CastleRights:
         self.wqs = wqs
         self.bqs = bqs
 
+    def copy(self):
+        return CastleRights(self.wks, self.bks, self.wqs, self.bqs)
+
 
 class Move:
     ranks_to_rows = {"1": 7, "2": 6, "3": 5, "4": 4,
@@ -720,22 +804,29 @@ class Move:
                      "e": 4, "f": 5, "g": 6, "h": 7}
     cols_to_files = {v: k for k, v in files_to_cols.items()}
 
-    def __init__(self, start_square, end_square, board, is_enpassant_move=False, is_castle_move=False):
+    def __init__(self, start_square, end_square, board, is_enpassant_move=False, is_castle_move=False,
+                 promotion_piece="Q"):
         self.start_row = start_square[0]
         self.start_col = start_square[1]
         self.end_row = end_square[0]
         self.end_col = end_square[1]
         self.piece_moved = board[self.start_row][self.start_col]
         self.piece_captured = board[self.end_row][self.end_col]
-        self.is_pawn_promotion = (self.piece_moved == "wp" and self.end_row == 0) or (
-                self.piece_moved == "bp" and self.end_row == 7)
+        # pawns and sentinels promote on the last rank (a sentinel to the sentinel version of the piece)
+        self.is_pawn_promotion = self.piece_moved[1] in "pS" and self.end_row == (0 if self.piece_moved[0] == "w" else 7)
         self.is_enpassant_move = is_enpassant_move
         if self.is_enpassant_move:
-            self.piece_captured = "wp" if self.piece_moved == "bp" else "bp"
+            self.piece_captured = board[self.start_row][self.end_col]  # the pawn or sentinel beside us
         self.is_castle_move = is_castle_move
 
         self.is_capture = self.piece_captured != "--"
+        self.promotion_piece = promotion_piece
+        if self.is_pawn_promotion:
+            self.promotion_code = self.piece_moved[0] + (
+                SENTINEL_PROMOTIONS[promotion_piece] if self.piece_moved[1] == "S" else promotion_piece)
         self.moveID = self.start_row * 1000 + self.start_col * 100 + self.end_row * 10 + self.end_col
+        if self.is_pawn_promotion:  # queen promotions keep the plain id, so a click matches them
+            self.moveID += 10000 * PROMOTION_PIECES.index(promotion_piece)
 
     def __eq__(self, other):
         if isinstance(other, Move):
@@ -752,12 +843,13 @@ class Move:
         end_square = self.getRankFile(self.end_row, self.end_col)
 
         if self.piece_moved[1] == "p":
-            if self.is_capture:
-                return self.cols_to_files[self.start_col] + "x" + end_square
-            else:
-                return end_square + "Q" if self.is_pawn_promotion else end_square
+            move_string = self.cols_to_files[self.start_col] + "x" + end_square if self.is_capture else end_square
+            return move_string + "=" + self.promotion_piece if self.is_pawn_promotion else move_string
 
-        move_string = self.piece_moved[1]
+        move_string = NOTATION.get(self.piece_moved[1], self.piece_moved[1])
         if self.is_capture:
             move_string += "x"
-        return move_string + end_square
+        move_string += end_square
+        if self.is_pawn_promotion:  # a sentinel promoting
+            move_string += "=" + NOTATION[self.promotion_code[1]]
+        return move_string
