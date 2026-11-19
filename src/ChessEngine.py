@@ -264,7 +264,9 @@ class GameState:
                 self.getCastleMoves(self.black_king_location[0], self.black_king_location[1], moves)
 
         # captures of a piece standing next to its own sentinel are not allowed
-        moves = [m for m in moves if m.piece_captured == "--" or not self.isDefendedBySentinel(m.end_row, m.end_col)]
+        # (en passant captures a pawn that stands beside the landing square)
+        moves = [m for m in moves if m.piece_captured == "--" or not self.isDefendedBySentinel(
+            m.start_row if m.is_enpassant_move else m.end_row, m.end_col)]
 
         if len(moves) == 0:
             if self.in_check:

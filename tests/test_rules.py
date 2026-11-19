@@ -50,3 +50,10 @@ def test_sentinel_en_passant_cannot_expose_king_on_the_rank():
     gs = ChessEngine.GameState(fen="7k/8/8/K2pS2r/8/8/8/8 w - d6 0 1")
     [move] = moves_to(gs, 2, 3)
     assert not move.is_enpassant_move
+
+
+def test_sentinel_shields_pawn_from_en_passant():
+    # the black sentinel on c6 guards the d5 pawn, so neither e5 piece may take it en passant
+    for attacker in ("P", "S"):
+        gs = ChessEngine.GameState(fen=f"4k3/8/2s5/3p{attacker}3/8/8/8/4K3 w - d6 0 1")
+        assert not any(m.is_enpassant_move for m in gs.getValidMoves()), attacker
