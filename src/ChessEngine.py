@@ -1,3 +1,6 @@
+# material values shared by the eval bar and the AI
+PIECE_VALUES = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 4}
+
 KNIGHT_OFFSETS = ((-2, -1), (-2, 1), (-1, 2), (1, 2), (2, -1), (2, 1), (-1, -2), (1, -2))
 KING_OFFSETS = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
 ROOK_DIRECTIONS = ((-1, 0), (0, -1), (1, 0), (0, 1))
@@ -170,7 +173,7 @@ class GameState:
         return file + str(rank)
 
     def evaluate(self, board):
-        piece_values = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 4}
+        piece_values = PIECE_VALUES
 
         score = 0
 

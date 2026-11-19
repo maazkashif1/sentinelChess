@@ -1,5 +1,6 @@
 import random
 
+from ChessEngine import PIECE_VALUES
 from config import load_config
 
 cfg = load_config()
@@ -91,7 +92,7 @@ piece_position_scores = {"wN": knight_scores,
                          "wS": sentinel_pawn_scores,
                          "bS": sentinel_pawn_scores[::-1]}
 
-piece_value = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1, "S": 5}
+piece_value = PIECE_VALUES
 pieces = ["bB", "bK", "bN", "bp", "bQ", "bR", "wB", "wK", "wN", "wp", "wQ", "wR", "wS", "bS"]
 
 CHECKMATE = cfg["ai"]["points_checkmate"]
