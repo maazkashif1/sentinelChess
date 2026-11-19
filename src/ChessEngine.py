@@ -515,10 +515,14 @@ class GameState:
             king_row, king_col = self.black_king_location
 
         board = self.board
+        enpassant_move = self.getSentinelEnpassantMove(row, col, piece_pinned, pin_direction,
+                                                       enemy_color, king_row, king_col)
         for d in KING_OFFSETS:
             end_row = row + d[0]
             end_col = col + d[1]
             if 0 <= end_row < 8 and 0 <= end_col < 8 and (not piece_pinned or pin_direction == d):
+                if enpassant_move is not None and (end_row, end_col) == self.enpassant_possible:
+                    continue  # stepping onto the en passant square captures the pawn (added below)
                 end_piece = board[end_row][end_col]
                 if end_piece == "--" or end_piece[0] == enemy_color:
                     moves.append(Move((row, col), (end_row, end_col), board))
@@ -527,35 +531,37 @@ class GameState:
             if not piece_pinned or pin_direction == (move_amount, 0):
                 moves.append(Move((row, col), (row + 2 * move_amount, col), board))
 
-        if self.enpassant_possible:
-            for d in KING_OFFSETS:
-                end_row = row + d[0]
-                end_col = col + d[1]
-                if (end_row, end_col) != self.enpassant_possible:
-                    continue
-                if piece_pinned and pin_direction != d:
-                    continue
-                if board[row][end_col][1] != "p":
-                    continue
-                attacking_piece = blocking_piece = False
-                if king_row == row:
-                    if king_col < col:
-                        inside_range = range(king_col + 1, col)
-                        outside_range = range(col + 1, 8)
-                    else:
-                        inside_range = range(king_col - 1, col + 1, -1)
-                        outside_range = range(col - 1, -1, -1)
-                    for i in inside_range:
-                        if board[row][i] != "--":
-                            blocking_piece = True
-                    for i in outside_range:
-                        square = board[row][i]
+        if enpassant_move is not None:
+            moves.append(enpassant_move)
+
+    def getSentinelEnpassantMove(self, row, col, piece_pinned, pin_direction, enemy_color, king_row, king_col):
+        """Return the sentinel's en passant capture, or None if it has none."""
+        if not self.enpassant_possible:
+            return None
+        board = self.board
+        for d in KING_OFFSETS:
+            end_row = row + d[0]
+            end_col = col + d[1]
+            if (end_row, end_col) != self.enpassant_possible:
+                continue
+            if piece_pinned and pin_direction != d:
+                return None
+            if board[row][end_col] != enemy_color + "p":
+                return None
+            # both the sentinel and the captured pawn leave this rank: make sure
+            # that does not open a rook or queen line onto the king
+            if king_row == row:
+                step = 1 if king_col < col else -1
+                c = king_col + step
+                while 0 <= c <= 7:
+                    square = board[row][c]
+                    if c not in (col, end_col) and square != "--":
                         if square[0] == enemy_color and square[1] in ("R", "Q"):
-                            attacking_piece = True
-                        elif square != "--":
-                            blocking_piece = True
-                if not attacking_piece or blocking_piece:
-                    moves.append(Move((row, col), (end_row, end_col), board, is_enpassant_move=True))
+                            return None
+                        break
+                    c += step
+            return Move((row, col), (end_row, end_col), board, is_enpassant_move=True)
+        return None
 
     def getRookMoves(self, row, col, moves):
         piece_pinned = False

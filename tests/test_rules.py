@@ -28,3 +28,25 @@ def test_fen_sets_side_to_move_kings_and_castling():
     # Q is listed but the white king has left e1, so the right is dropped
     assert not gs.current_castling_rights.wqs
     assert gs.getValidMoves()
+
+
+def moves_to(gs, row, col):
+    return [m for m in gs.getValidMoves() if (m.end_row, m.end_col) == (row, col)]
+
+
+def test_sentinel_captures_en_passant():
+    # black just played d7-d5; the white sentinel on e5 steps to d6 and takes it
+    gs = ChessEngine.GameState(fen="4k3/8/8/3pS3/8/8/8/4K3 w - d6 0 1")
+    [move] = moves_to(gs, 2, 3)
+    assert move.is_enpassant_move
+    gs.makeMove(move)
+    assert gs.board[3][3] == "--" and gs.board[2][3] == "wS"
+    gs.undoMove()
+    assert gs.board[3][3] == "bp" and gs.board[3][4] == "wS"
+
+
+def test_sentinel_en_passant_cannot_expose_king_on_the_rank():
+    # taking d5 would empty the rank between the white king and the black rook
+    gs = ChessEngine.GameState(fen="7k/8/8/K2pS2r/8/8/8/8 w - d6 0 1")
+    [move] = moves_to(gs, 2, 3)
+    assert not move.is_enpassant_move
