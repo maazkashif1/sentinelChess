@@ -212,3 +212,15 @@ def test_only_the_king_moves_in_double_check():
     moves = gs.getValidMoves()
     assert len(gs.checks) == 2
     assert moves and all(m.piece_moved == "wK" for m in moves)
+
+
+def test_fen_validation():
+    assert ChessEngine.fen_error("rnbqkbnr/ppsspppp/8/8/8/8/PPSSPPPP/RNBQKBNR w KQkq - 0 1") is None
+    assert ChessEngine.fen_error("4k3/8/8/8/8/8/8/4K3 w - - 0 1") is None
+    assert "check" in ChessEngine.fen_error("4k3/3S4/8/8/8/8/8/4K3 w - - 0 1")  # black is in check but white moves
+    assert "king" in ChessEngine.fen_error("8/8/8/8/8/8/8/4K3 w - - 0 1")
+    assert "9 squares" in ChessEngine.fen_error("4k3/8/8/8/8/8/8/4K4 w - - 0 1")
+    assert "ranks" in ChessEngine.fen_error("4k3/8/8 w - - 0 1")
+    assert "Unknown" in ChessEngine.fen_error("4k3/8/8/8/8/8/8/4KX2 w - - 0 1")
+    assert "Pawns" in ChessEngine.fen_error("P3k3/8/8/8/8/8/8/4K3 w - - 0 1")
+    assert "sentinel" in ChessEngine.fen_error("3Sk3/8/8/8/8/8/8/4K3 b - - 0 1")

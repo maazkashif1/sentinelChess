@@ -23,6 +23,46 @@ ROOK_DIRECTIONS = ((-1, 0), (0, -1), (1, 0), (0, 1))
 BISHOP_DIRECTIONS = ((-1, -1), (-1, 1), (1, 1), (1, -1))
 
 
+def fen_error(fen):
+    """Return why a FEN string can't start a game, or None if it is usable."""
+    fields = fen.split()
+    if not fields:
+        return "The FEN is empty."
+    ranks = fields[0].split("/")
+    if len(ranks) != 8:
+        return "The board needs 8 ranks separated by '/'."
+    for number, rank in zip(range(8, 0, -1), ranks):
+        squares = 0
+        for char in rank:
+            if char in "12345678":
+                squares += int(char)
+            elif char.upper() in "KQRBNP" + SENTINEL_FAMILY:
+                squares += 1
+            else:
+                return f"Unknown piece '{char}' on rank {number}."
+        if squares != 8:
+            return f"Rank {number} has {squares} squares instead of 8."
+    if len(fields) > 1 and fields[1] not in ("w", "b"):
+        return "Side to move must be 'w' or 'b'."
+    if len(fields) > 3 and fields[3] != "-" and not (
+            len(fields[3]) == 2 and fields[3][0] in "abcdefgh" and fields[3][1] in "36"):
+        return "The en passant square must be '-' or a square on rank 3 or 6."
+
+    gs = GameState(fen=fen)
+    flat = [piece for row in gs.board for piece in row]
+    if flat.count("wK") != 1 or flat.count("bK") != 1:
+        return "Each side needs exactly one king."
+    if any(piece[1] == "p" for piece in gs.board[0] + gs.board[7]):
+        return "Pawns can't stand on the first or last rank."
+    if "wS" in gs.board[0] or "bS" in gs.board[7]:
+        return "A sentinel on its last rank must already have promoted."
+    mover, waiting = ("White", "Black") if gs.white_to_move else ("Black", "White")
+    gs.white_to_move = not gs.white_to_move
+    if gs.inCheck():
+        return f"{waiting} is in check, but it is {mover}'s turn."
+    return None
+
+
 class GameState:
     def __init__(self, fen=None):
         if fen is None:
@@ -312,8 +352,8 @@ class GameState:
 
         # captures of a piece standing next to its own sentinel are not allowed
         # (en passant captures a pawn that stands beside the landing square)
-        moves = [m for m in moves if m.piece_captured == "--" or not self.isDefendedBySentinel(
-            m.start_row if m.is_enpassant_move else m.end_row, m.end_col)]
+        moves = [m for m in moves if m.piece_captured == "--" or (m.piece_captured[1] != "K" and not self.isDefendedBySentinel(
+            m.start_row if m.is_enpassant_move else m.end_row, m.end_col))]
 
         if len(moves) == 0:
             if self.in_check:
