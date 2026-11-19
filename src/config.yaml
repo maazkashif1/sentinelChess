@@ -3,7 +3,6 @@ design:
   first_color: "white"
   second_color: "gray"
   selection_color: "blue"
-  possible_moves_color: "yellow"
   highlight_king_check: False
   show_eval_bar: True
 
@@ -17,12 +16,10 @@ game:
   start_fen: None   # http://www.netreal.de/Forsyth-Edwards-Notation/index.php
 
 ai:
-  version: "v4"
+  version: "v4"   # v4: full engine, v3: plain alpha-beta, v1: random moves
   depth: 3
   eval_depth: 2   # search depth behind the eval bar
   castling_score: 1
-  protect_square_score: 1
-  check_punish: 2
   positional_weight: 0.01  # piece-square tables are in centipawns, piece values in pawns
   move_repetition_punish: 1
   points_checkmate: 1000
