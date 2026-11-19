@@ -237,10 +237,8 @@ class GameState:
                         valid_squares.append(valid_square)
                         if valid_square[0] == check_row and valid_square[1] == check_col:  
                             break
-                for i in range(len(moves) - 1, -1, -1):  
-                    if moves[i].piece_moved[1] != "K":  
-                        if not (moves[i].end_row, moves[i].end_col) in valid_squares:  
-                            moves.remove(moves[i])
+                valid_squares = set(valid_squares)
+                moves = [m for m in moves if m.piece_moved[1] == "K" or (m.end_row, m.end_col) in valid_squares]
             else:  
                 self.getKingMoves(king_row, king_col, moves)
         else:  
@@ -249,11 +247,8 @@ class GameState:
             else:
                 self.getCastleMoves(self.black_king_location[0], self.black_king_location[1], moves)
 
-        for i in range(len(moves) - 1, -1, -1):
-            move = moves[i]
-            if move.piece_captured != "--":  # If this is a capture move
-                if self.isDefendedBySentinel(move.end_row, move.end_col):
-                    moves.remove(move)
+        # captures of a piece standing next to its own sentinel are not allowed
+        moves = [m for m in moves if m.piece_captured == "--" or not self.isDefendedBySentinel(m.end_row, m.end_col)]
 
         if len(moves) == 0:
             if self.in_check:
@@ -322,15 +317,11 @@ class GameState:
         return False
 
     def isDefendedBySentinel(self, row, col):
-        directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-        for d in directions:
-            check_row = row + d[0]
-            check_col = col + d[1]
-            if 0 <= check_row <= 7 and 0 <= check_col <= 7:
-                piece = self.board[check_row][check_col]
-                if piece[1] == "S":  
-                    if piece[0] == self.board[row][col][0]:
-                        return True
+        sentinel = self.board[row][col][0] + "S"
+        for dr, dc in KING_OFFSETS:
+            r, c = row + dr, col + dc
+            if 0 <= r <= 7 and 0 <= c <= 7 and self.board[r][c] == sentinel:
+                return True
         return False
 
     def getAllPossibleMoves(self):
