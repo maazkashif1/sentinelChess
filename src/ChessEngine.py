@@ -29,8 +29,6 @@ class GameState:
         self.checkmate = False
         self.stalemate = False
         self.rep_stalemate = False
-        self.move_draw = False
-        self.ins_draw = False
         self.in_check = False
         self.pins = []
         self.checks = []
@@ -39,9 +37,6 @@ class GameState:
         self.current_castling_rights = CastleRights(True, True, True, True)
         self.castle_rights_log = [CastleRights(self.current_castling_rights.wks, self.current_castling_rights.bks,
                                                self.current_castling_rights.wqs, self.current_castling_rights.bqs)]
-        self.fullmove_number = 0
-        self.halfmove_clock = 0
-        self.castling_availability = "KQkq"
 
     def makeMove(self, move):
         self.board[move.start_row][move.start_col] = "--"
@@ -84,16 +79,6 @@ class GameState:
         self.updateCastleRights(move)
         self.castle_rights_log.append(CastleRights(self.current_castling_rights.wks, self.current_castling_rights.bks,
                                                    self.current_castling_rights.wqs, self.current_castling_rights.bqs))
-
-        # Update fullmove number and halfmove clock
-        if self.white_to_move:
-            self.fullmove_number += 1
-        self.halfmove_clock += 1
-
-        if move.piece_captured or move.piece_moved[1] == 'p' or move.piece_moved[1] == 'S':
-            self.halfmove_clock = 0
-
-        self.castling_availability = ('K' if self.current_castling_rights.wks else '') + ('Q' if self.current_castling_rights.wqs else '') + ('k' if self.current_castling_rights.bks else '') + ('q' if self.current_castling_rights.bqs else '')
 
     def undoMove(self):
         if len(self.move_log) != 0:  # make sure that there is a move to undo
