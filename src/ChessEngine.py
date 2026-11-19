@@ -474,15 +474,16 @@ class GameState:
 
         return in_check, pins, checks
 
+    def pinDirection(self, row, col):
+        """Direction (from the king) of the pin on the piece at (row, col), or None if it is not pinned."""
+        for pin in self.pins:
+            if pin[0] == row and pin[1] == col:
+                return pin[2], pin[3]
+        return None
+
     def getPawnMoves(self, row, col, moves):
-        piece_pinned = False
-        pin_direction = ()
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                pin_direction = (self.pins[i][2], self.pins[i][3])
-                self.pins.remove(self.pins[i])
-                break
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         if self.white_to_move:
             move_amount = -1
@@ -560,14 +561,8 @@ class GameState:
     def getSentinelPawnMoves(self, row, col, moves):
         """Sentinel: steps one square in any direction (like a king), may
         double-step forward from its starting rank and can capture en passant."""
-        piece_pinned = False
-        pin_direction = ()
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                pin_direction = (self.pins[i][2], self.pins[i][3])
-                self.pins.remove(self.pins[i])
-                break
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         if self.white_to_move:
             move_amount, start_row, enemy_color = -1, 6, "b"
@@ -626,15 +621,8 @@ class GameState:
         return None
 
     def getRookMoves(self, row, col, moves):
-        piece_pinned = False
-        pin_direction = ()
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                pin_direction = (self.pins[i][2], self.pins[i][3])
-                if self.board[row][col][1] != "Q":  
-                    self.pins.remove(self.pins[i])
-                break
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         directions = ((-1, 0), (0, -1), (1, 0), (0, 1))  
         enemy_color = "b" if self.white_to_move else "w"
@@ -657,12 +645,8 @@ class GameState:
                     break
 
     def getKnightMoves(self, row, col, moves):
-        piece_pinned = False
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                self.pins.remove(self.pins[i])
-                break
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         knight_moves = ((-2, -1), (-2, 1), (-1, 2), (1, 2), (2, -1), (2, 1), (-1, -2), (1, -2))
         ally_color = "w" if self.white_to_move else "b"
@@ -676,14 +660,8 @@ class GameState:
                         moves.append(Move((row, col), (end_row, end_col), self.board))
 
     def getBishopMoves(self, row, col, moves):
-        piece_pinned = False
-        pin_direction = ()
-        for i in range(len(self.pins) - 1, -1, -1):
-            if self.pins[i][0] == row and self.pins[i][1] == col:
-                piece_pinned = True
-                pin_direction = (self.pins[i][2], self.pins[i][3])
-                self.pins.remove(self.pins[i])
-                break
+        pin_direction = self.pinDirection(row, col)
+        piece_pinned = pin_direction is not None
 
         directions = ((-1, -1), (-1, 1), (1, 1), (1, -1))  
         enemy_color = "b" if self.white_to_move else "w"

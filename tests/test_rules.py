@@ -145,3 +145,12 @@ def test_sentinel_double_step_can_be_taken_en_passant_by_a_sentinel_only():
             assert gs.board[3][3] == "--" and captures[0].piece_captured == "bS"
             gs.undoMove()
             assert gs.board[3][3] == "bS"
+
+
+def test_pinned_queen_stays_on_the_pin_line():
+    def queen_moves(fen):
+        gs = ChessEngine.GameState(fen=fen)
+        return sorted(str(m) for m in gs.getValidMoves() if m.piece_moved == "wQ")
+
+    assert queen_moves("4k3/8/8/b7/8/8/3Q4/4K3 w - - 0 1") == ["Qb4", "Qc3", "Qxa5"]
+    assert queen_moves("k3r3/8/8/8/8/8/4Q3/4K3 w - - 0 1") == ["Qe3", "Qe4", "Qe5", "Qe6", "Qe7", "Qxe8"]
